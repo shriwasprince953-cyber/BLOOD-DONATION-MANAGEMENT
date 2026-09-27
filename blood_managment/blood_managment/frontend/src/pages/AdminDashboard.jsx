@@ -48,7 +48,6 @@ function AdminDashboard() {
 
   const loadDashboardData = async () => {
     try {
-      setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         const user = session.user;
@@ -142,7 +141,9 @@ function AdminDashboard() {
   };
 
   useEffect(() => {
-    loadDashboardData();
+    queueMicrotask(() => {
+      void loadDashboardData();
+    });
   }, []);
 
   // Fetch matched donors for a specific request
@@ -167,22 +168,6 @@ function AdminDashboard() {
         { profile_id: "d2", full_name: "Priya Sharma", email: "priya@gmail.com", phone_number: "+91 91234 56789", blood_group: req?.bloodGroup || "O-", city: "Nagpur", is_available: true, response_status: "PENDING", already_notified: true },
         { profile_id: "d3", full_name: "Karan Singh", email: "karan@gmail.com", phone_number: "+91 98765 43210", blood_group: req?.bloodGroup || "O-", city: "Nagpur", is_available: false, response_status: null, already_notified: false },
       ];
-
-      // Check if the demo donor responded to this request locally
-      const localResponses = JSON.parse(localStorage.getItem("temp_responses") || "{}");
-      if (localResponses[reqId]) {
-        allMockDonors.unshift({
-          profile_id: "demo_prince",
-          full_name: "Prince (Demo Donor)",
-          email: "prince@gmail.com",
-          phone_number: "+91 88888 88888",
-          blood_group: req?.bloodGroup || "O-",
-          city: "Nagpur",
-          is_available: true,
-          response_status: localResponses[reqId],
-          already_notified: true
-        });
-      }
 
       setMatchedDonors(allMockDonors.filter(d => d.blood_group === req?.bloodGroup));
     } finally {

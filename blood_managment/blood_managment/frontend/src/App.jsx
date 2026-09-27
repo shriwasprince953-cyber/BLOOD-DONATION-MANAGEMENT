@@ -1,71 +1,75 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import Dashboard from "./pages/Dashboard";
-import Requirements from "./pages/Requirements";
-import Profile from "./pages/Profile";
-import RequirementDetail from "./pages/RequirementDetail";
-import AdminDashboard from "./pages/AdminDashboard";
-import AdminLogin from "./pages/AdminLogin";
-import AdminDonorView from "./pages/AdminDonorView";
+const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Requirements = lazy(() => import("./pages/Requirements"));
+const Profile = lazy(() => import("./pages/Profile"));
+const RequirementDetail = lazy(() => import("./pages/RequirementDetail"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AdminLogin = lazy(() => import("./pages/AdminLogin"));
+const AdminDonorView = lazy(() => import("./pages/AdminDonorView"));
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route
-          path="/"
-          element={<Navigate to="/login" replace />}
-        />
+      <Suspense fallback={null}>
+        <Routes>
+          <Route
+            path="/"
+            element={<Navigate to="/login" replace />}
+          />
 
-        <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<Login />} />
 
-        <Route
-          path="/register"
-          element={<Register />}
-        />
+          <Route
+            path="/register"
+            element={<Register />}
+          />
 
-        <Route
-          path="/dashboard"
-          element={<Dashboard />}
-        />
+          <Route
+            path="/dashboard"
+            element={<ProtectedRoute requiredRole="DONOR"><Dashboard /></ProtectedRoute>}
+          />
 
-        <Route
-          path="/requirements"
-          element={<Requirements />}
-        />
+          <Route
+            path="/requirements"
+            element={<ProtectedRoute requiredRole="DONOR"><Requirements /></ProtectedRoute>}
+          />
 
-        <Route
-          path="/requirements/:id"
-          element={<RequirementDetail />}
-        />
+          <Route
+            path="/requirements/:id"
+            element={<ProtectedRoute requiredRole="DONOR"><RequirementDetail /></ProtectedRoute>}
+          />
 
-        <Route
-          path="/profile"
-          element={<Profile />}
-        />
+          <Route
+            path="/profile"
+            element={<ProtectedRoute requiredRole="DONOR"><Profile /></ProtectedRoute>}
+          />
 
-        <Route
-          path="/admin/login"
-          element={<AdminLogin />}
-        />
+          <Route
+            path="/admin/login"
+            element={<AdminLogin />}
+          />
 
-        <Route
-          path="/admin"
-          element={<AdminDashboard />}
-        />
+          <Route
+            path="/admin"
+            element={<ProtectedRoute requiredRole="ADMIN"><AdminDashboard /></ProtectedRoute>}
+          />
 
-        <Route
-          path="/admin/donor-view"
-          element={<AdminDonorView />}
-        />
+          <Route
+            path="/admin/donor-view"
+            element={<ProtectedRoute requiredRole="ADMIN"><AdminDonorView /></ProtectedRoute>}
+          />
 
-        <Route
-          path="*"
-          element={<Navigate to="/login" replace />}
-        />
-      </Routes>
+          <Route
+            path="*"
+            element={<Navigate to="/login" replace />}
+          />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

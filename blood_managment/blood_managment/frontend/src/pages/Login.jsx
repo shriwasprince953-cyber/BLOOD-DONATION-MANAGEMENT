@@ -17,15 +17,8 @@ function Login() {
     setError("");
     setLoading(true);
 
-    // Complete bypass for Demo Donor to avoid Supabase "Failed to fetch" error
-    if (email === "prince@gmail.com" && password === "prince123") {
-      setLoading(false);
-      navigate("/dashboard");
-      return;
-    }
-
     try {
-      const { error: loginError } = await supabase.auth.signInWithPassword({
+      const { data, error: loginError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -36,17 +29,31 @@ function Login() {
         return;
       }
 
-      const res = await api.get("/auth/me");
-      setLoading(false);
+      let res;
+      try {
+        res = await api.get("/auth/me");
+      } catch (profileError) {
+        if (profileError.status !== 403 || !data.user?.email) {
+          throw profileError;
+        }
+
+        res = await api.post("/auth/register", {
+          full_name: data.user.user_metadata?.full_name || data.user.email,
+          email: data.user.email,
+        });
+      }
+
       if (res.data?.role === "ADMIN") {
         navigate("/admin");
       } else {
         navigate("/dashboard");
       }
     } catch (err) {
-      console.warn("API role fetch failed, defaulting to dashboard:", err);
+      console.warn("Unable to verify authenticated user profile:", err);
+      await supabase.auth.signOut();
+      setError("Unable to verify your account. Please try again.");
+    } finally {
       setLoading(false);
-      navigate("/dashboard");
     }
   };
 

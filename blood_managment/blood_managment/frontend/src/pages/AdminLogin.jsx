@@ -17,13 +17,6 @@ function AdminLogin() {
     setError("");
     setLoading(true);
 
-    // Complete bypass for Demo Admin to avoid Supabase "Failed to fetch" error
-    if ((email === "admin@gamil.com" || email === "admin@gmail.com") && password === "admin123") {
-      setLoading(false);
-      navigate("/admin");
-      return;
-    }
-
     try {
       const { error: loginError } = await supabase.auth.signInWithPassword({
         email,
@@ -37,7 +30,6 @@ function AdminLogin() {
       }
 
       const res = await api.get("/auth/me");
-      setLoading(false);
       if (res.data?.role === "ADMIN") {
         navigate("/admin");
       } else {
@@ -46,8 +38,10 @@ function AdminLogin() {
       }
     } catch (err) {
       console.warn("API role fetch failed during admin login:", err);
-      setLoading(false);
+      await supabase.auth.signOut();
       setError("Failed to verify admin privileges. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 

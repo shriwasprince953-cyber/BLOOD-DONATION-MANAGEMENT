@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import api from "../api/axios";
 
 function Register() {
   const navigate = useNavigate();
@@ -17,8 +18,8 @@ function Register() {
     setError("");
     setLoading(true);
 
-    const { data, error: registerError } =
-      await supabase.auth.signUp({
+    try {
+      const { data, error: registerError } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -28,17 +29,26 @@ function Register() {
         },
       });
 
-    setLoading(false);
+      if (registerError) {
+        setError(registerError.message);
+        return;
+      }
 
-    if (registerError) {
-      setError(registerError.message);
-      return;
-    }
-
-    if (data.session) {
-      navigate("/dashboard");
-    } else {
-      navigate("/login");
+      if (data.session) {
+        await api.post("/auth/register", {
+          full_name: name,
+          email,
+        });
+        navigate("/dashboard");
+      } else {
+        navigate("/login");
+      }
+    } catch (err) {
+      console.warn("Unable to create account or application profile:", err);
+      await supabase.auth.signOut();
+      setError("Unable to complete account setup. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 

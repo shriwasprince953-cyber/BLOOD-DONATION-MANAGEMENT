@@ -1,6 +1,6 @@
 import { supabase } from "../lib/supabase";
 
-const baseURL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const baseURL = (import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1").replace(/\/$/, "");
 
 async function request(path, options = {}) {
   const { data: { session } } = await supabase.auth.getSession();
@@ -20,7 +20,9 @@ async function request(path, options = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
+    const error = new Error(`Request failed with status ${response.status}`);
+    error.status = response.status;
+    throw error;
   }
 
   const data = await response.json();

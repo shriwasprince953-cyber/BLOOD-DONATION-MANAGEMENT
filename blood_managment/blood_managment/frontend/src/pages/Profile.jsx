@@ -128,7 +128,7 @@ function Profile() {
           city: donor.city,
           last_donation_date: donor.lastDonationDate || null,
         });
-      } catch (getDonorErr) {
+      } catch {
         await api.post("/donors/me", {
           blood_group: donor.bloodGroup,
           is_available: donor.isAvailable,

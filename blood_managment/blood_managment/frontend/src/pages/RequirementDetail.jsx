@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import api from "../api/axios";
 
@@ -77,7 +77,6 @@ const mockRequirements = [
 
 function RequirementDetail() {
   const { id } = useParams();
-  const navigate = useNavigate();
 
   const [requirement, setRequirement] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -145,7 +144,7 @@ function RequirementDetail() {
           if (existing) {
             setResponseStatus(existing.status);
           }
-        } catch (respErr) {
+        } catch {
           // Local fallback check
           const localResponses = JSON.parse(localStorage.getItem("temp_responses") || "{}");
           if (localResponses[id]) {

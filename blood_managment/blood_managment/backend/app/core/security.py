@@ -22,6 +22,7 @@ ISSUER = f"{supabase_url}/auth/v1"
 # PyJWKClient natively fetches and caches JWKS.
 # It automatically handles key rotation by querying the endpoint again if an unknown 'kid' is encountered.
 jwks_client = PyJWKClient(JWKS_URL)
+ALLOWED_JWT_ALGORITHMS = {"RS256", "ES256", "EdDSA"}
 
 
 class TokenData(BaseModel):
@@ -47,12 +48,15 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
     try:
         # Dynamically retrieve the correct public signing key based on the token's 'kid' header
         signing_key = jwks_client.get_signing_key_from_jwt(token)
+        algorithm = signing_key.algorithm_name
+        if algorithm not in ALLOWED_JWT_ALGORITHMS:
+            raise jwt.InvalidAlgorithmError(f"Unsupported JWT signing algorithm: {algorithm}")
 
         # Decode and rigorously validate the token claims
         payload = jwt.decode(
             token,
             signing_key.key,
-            algorithms=["RS256"],
+            algorithms=[algorithm],
             audience="authenticated",
             issuer=ISSUER,
             options={

@@ -33,7 +33,13 @@ async def register_profile(
             detail="Profile is already registered.",
         )
 
-    if email_from_token and email_from_token.lower() != payload.email.lower():
+    if not email_from_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The authenticated Supabase user does not include an email address.",
+        )
+
+    if email_from_token.lower() != payload.email.lower():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email must match the authenticated Supabase user.",
