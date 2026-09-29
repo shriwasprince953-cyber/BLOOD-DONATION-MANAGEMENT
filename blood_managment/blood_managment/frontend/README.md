@@ -1,5 +1,13 @@
 # React + Vite
 
+## RaktSetu setup and checks
+
+Copy `.env.example` to `.env`, configure the Supabase project and API URL, then run `npm ci` and `npm run dev`.
+
+Run `npm test`, `npm run lint` and `npm run build` for regression checks. Password recovery requires the frontend `/reset-password` URL in Supabase Auth's redirect allowlist.
+
+Optional mocked browser checks: install Python Selenium, run Vite on `127.0.0.1:5179` with `VITE_SUPABASE_URL=https://test-project.supabase.co`, `VITE_SUPABASE_ANON_KEY=test-public-key` and `VITE_API_URL=http://127.0.0.1:8000/api/v1`, then run `python tests/browser_smoke.py`. These checks intercept auth/API requests and do not verify real Supabase credentials or email delivery.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:

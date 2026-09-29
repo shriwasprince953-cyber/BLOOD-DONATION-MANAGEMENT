@@ -2,78 +2,11 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import api from "../api/axios";
+import { mapRequirement } from "../lib/requirements";
 
 function Icon({ children }) {
   return <span className="dashboard-icon">{children}</span>;
 }
-
-const mockRequirements = [
-  {
-    id: "1",
-    bloodGroup: "O-",
-    title: "Urgent blood requirement",
-    hospital: "City Care Hospital",
-    location: "Nagpur, Maharashtra",
-    units: 3,
-    urgency: "URGENT",
-    posted: "18 minutes ago",
-    distance: "3.2 km",
-    patientName: "Rajesh Kumar",
-    notes: "Patient is undergoing urgent bypass surgery. Any O- donor in the area is requested to reach out immediately.",
-  },
-  {
-    id: "2",
-    bloodGroup: "A+",
-    title: "Blood donation needed",
-    hospital: "Orange City Hospital",
-    location: "Nagpur, Maharashtra",
-    units: 2,
-    urgency: "NORMAL",
-    posted: "1 hour ago",
-    distance: "5.8 km",
-    patientName: "Aarti Sharma",
-    notes: "Needed for scheduled minor operation. Replacement donor requested.",
-  },
-  {
-    id: "3",
-    bloodGroup: "B+",
-    title: "Immediate blood requirement",
-    hospital: "Wockhardt Hospital",
-    location: "Nagpur, Maharashtra",
-    units: 4,
-    urgency: "HIGH",
-    posted: "2 hours ago",
-    distance: "7.1 km",
-    patientName: "Amit Patel",
-    notes: "Requires multiple transfusions due to sudden drop in platelet count. Immediate support is highly appreciated.",
-  },
-  {
-    id: "4",
-    bloodGroup: "AB+",
-    title: "Blood required for surgery",
-    hospital: "Alexis Hospital",
-    location: "Nagpur, Maharashtra",
-    units: 2,
-    urgency: "HIGH",
-    posted: "3 hours ago",
-    distance: "8.4 km",
-    patientName: "Sushma Deshmukh",
-    notes: "Patient is scheduled for orthopedic surgery. Please contact.",
-  },
-  {
-    id: "5",
-    bloodGroup: "O+",
-    title: "Blood donation request",
-    hospital: "SevenStar Hospital",
-    location: "Nagpur, Maharashtra",
-    units: 1,
-    urgency: "NORMAL",
-    posted: "5 hours ago",
-    distance: "10.2 km",
-    patientName: "Vikram Singh",
-    notes: "General replacement donation request for thalassaemia patient's monthly transfusion.",
-  },
-];
 
 function RequirementDetail() {
   const { id } = useParams();
@@ -84,81 +17,33 @@ function RequirementDetail() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
   const [userInitial, setUserInitial] = useState("U");
-  const [userName, setUserName] = useState("Prince");
+  const [userName, setUserName] = useState("Donor");
 
   useEffect(() => {
+    let active = true;
     async function loadData() {
+      setLoading(true);
+      setRequirement(null);
+      setResponseStatus(null);
+      setMessage({ type: "", text: "" });
       try {
-        setLoading(true);
-
-        // Get user session info
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          const user = session.user;
-          const initial = user.user_metadata?.full_name
-            ? user.user_metadata.full_name.charAt(0).toUpperCase()
-            : user.email.charAt(0).toUpperCase();
-          setUserInitial(initial);
-          setUserName(user.user_metadata?.full_name || localStorage.getItem("temp_fullName") || "Prince");
-        }
-
-        // Try getting real requirement from API
-        try {
-          const res = await api.get(`/requirements/${id}`);
-          if (res.data) {
-            setRequirement({
-              id: res.data.id,
-              bloodGroup: res.data.blood_group,
-              title: `Blood Requirement for ${res.data.patient_name}`,
-              hospital: res.data.hospital_name,
-              location: res.data.location,
-              units: res.data.units_required,
-              urgency: res.data.urgency_level,
-              posted: "Just now",
-              distance: "Nearby",
-              patientName: res.data.patient_name,
-              notes: res.data.notes || "No special instructions provided.",
-              status: res.data.status,
-            });
-          }
-        } catch (apiErr) {
-          console.warn("API error fetching requirement details. Falling back to mock data.", apiErr);
-          // Find in mock data
-          const found = mockRequirements.find((item) => String(item.id) === String(id));
-          if (found) {
-            setRequirement(found);
-          } else {
-            // Check local storage items if any
-            const savedReqs = JSON.parse(localStorage.getItem("temp_requirements") || "[]");
-            const localFound = savedReqs.find((item) => String(item.id) === String(id));
-            if (localFound) {
-              setRequirement(localFound);
-            }
-          }
-        }
-
-        // Check if user already responded to this request
-        try {
-          const res = await api.get("/responses/me");
-          const existing = res.data.items?.find((r) => String(r.requirement_id) === String(id));
-          if (existing) {
-            setResponseStatus(existing.status);
-          }
-        } catch {
-          // Local fallback check
-          const localResponses = JSON.parse(localStorage.getItem("temp_responses") || "{}");
-          if (localResponses[id]) {
-            setResponseStatus(localResponses[id]);
-          }
-        }
-      } catch (err) {
-        console.error("Error loading details:", err);
+        const [{ data: profile }, { data: request }] = await Promise.all([
+          api.get("/auth/me"), api.get(`/requirements/${id}`),
+        ]);
+        if (!active) return;
+        setUserInitial(profile.full_name.charAt(0).toUpperCase());
+        setUserName(profile.full_name);
+        setRequirement(mapRequirement(request));
+        const { data } = await api.get(`/responses/me?requirement_id=${encodeURIComponent(id)}`);
+        if (active) setResponseStatus(data.items[0]?.status || null);
+      } catch (error) {
+        if (active) setMessage({ type: "error", text: error.message });
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }
-
-    loadData();
+    void loadData();
+    return () => { active = false; };
   }, [id]);
 
   const handleDonate = async () => {
@@ -170,16 +55,7 @@ function RequirementDetail() {
       setResponseStatus(res.data.status || "PENDING");
       setMessage({ type: "success", text: "Thank you! Your donation request has been submitted." });
     } catch (err) {
-      console.warn("API response failed, saving donation response locally:", err);
-      // Simulate success locally
-      const localResponses = JSON.parse(localStorage.getItem("temp_responses") || "{}");
-      localResponses[id] = "PENDING";
-      localStorage.setItem("temp_responses", JSON.stringify(localResponses));
-      setResponseStatus("PENDING");
-      setMessage({
-        type: "success",
-        text: "Thank you! Your donation response has been registered locally (Offline mode).",
-      });
+      setMessage({ type: "error", text: err.message || "Unable to submit your response. Please retry." });
     } finally {
       setSubmitting(false);
     }
@@ -203,7 +79,7 @@ function RequirementDetail() {
       <div className="dashboard-page" style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
         <div className="card" style={{ padding: "40px", textAlign: "center" }}>
           <h2>Request Not Found</h2>
-          <p style={{ marginTop: "10px", color: "var(--text-secondary)" }}>The blood request details could not be loaded.</p>
+          <p style={{ marginTop: "10px", color: "var(--text-secondary)" }}>{message.text || "The blood request details could not be loaded."}</p>
           <Link to="/requirements" className="btn btn-primary" style={{ marginTop: "20px" }}>
             Back to Requests
           </Link>
@@ -381,9 +257,9 @@ function RequirementDetail() {
                     className="btn btn-primary"
                     style={{ width: "100%", padding: "14px" }}
                     onClick={handleDonate}
-                    disabled={submitting}
+                    disabled={submitting || !["OPEN", "IN_PROGRESS"].includes(requirement.status)}
                   >
-                    {submitting ? "Submitting..." : "I Can Donate →"}
+                    {submitting ? "Submitting..." : (["OPEN", "IN_PROGRESS"].includes(requirement.status) ? "I Can Donate →" : "Request closed")}
                   </button>
                 )}
               </div>

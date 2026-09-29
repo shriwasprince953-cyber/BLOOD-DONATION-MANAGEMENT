@@ -42,7 +42,7 @@ class Donor(Base):
     )
     
     blood_group: Mapped[BloodGroup] = mapped_column(
-        SQLEnum(BloodGroup, values_callable=lambda obj: [e.value for e in obj]),
+        SQLEnum(BloodGroup, name="blood_group", values_callable=lambda obj: [e.value for e in obj]),
         index=True, 
         nullable=False
     )

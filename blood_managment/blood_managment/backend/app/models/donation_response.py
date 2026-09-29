@@ -51,7 +51,7 @@ class DonationResponse(Base):
     )
     
     status: Mapped[ResponseStatus] = mapped_column(
-        SQLEnum(ResponseStatus, values_callable=lambda obj: [e.value for e in obj]),
+        SQLEnum(ResponseStatus, name="response_status", values_callable=lambda obj: [e.value for e in obj]),
         default=ResponseStatus.PENDING, 
         index=True, 
         nullable=False

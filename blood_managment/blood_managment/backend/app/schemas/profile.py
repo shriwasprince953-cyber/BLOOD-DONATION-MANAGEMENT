@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, UUID4
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, UUID4, field_validator
 
 from app.models.profile import UserRole
 from app.schemas.donor import DonorCreate, DonorResponse
@@ -9,6 +9,7 @@ from app.schemas.donor import DonorCreate, DonorResponse
 
 class ProfileBase(BaseModel):
     """Base fields shared across multiple Profile schemas."""
+    model_config = ConfigDict(str_strip_whitespace=True)
     full_name: str = Field(..., min_length=2, max_length=255, description="User's full name")
     email: EmailStr = Field(..., description="User's email address")
     phone_number: Optional[str] = Field(None, max_length=20, description="Optional contact number")
@@ -27,8 +28,15 @@ class ProfileRegister(ProfileBase):
 
 class ProfileUpdate(BaseModel):
     """Schema for updating an existing Profile. All fields are optional."""
+    model_config = ConfigDict(str_strip_whitespace=True)
     full_name: Optional[str] = Field(None, min_length=2, max_length=255)
     phone_number: Optional[str] = Field(None, max_length=20)
+    @field_validator("full_name")
+    @classmethod
+    def reject_null_name(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("Full name cannot be null")
+        return value
     # Note: Email updates are typically handled by Supabase Auth directly, 
     # so we exclude email from the standard application-level update schema.
 

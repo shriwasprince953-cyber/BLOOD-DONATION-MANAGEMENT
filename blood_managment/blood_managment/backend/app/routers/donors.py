@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.dependencies import CurrentDonor, CurrentProfile, DbSession
 from app.schemas.blood_requirement import BloodRequirementResponse
@@ -37,8 +37,8 @@ async def update_my_donor_profile(
 async def list_matching_requirements_for_me(
     db: DbSession,
     donor: CurrentDonor,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
 ) -> list[BloodRequirementResponse]:
     requirements = await matching_service.visible_requirements_for_donor(db, donor, limit, offset)
     return [BloodRequirementResponse.model_validate(item) for item in requirements]

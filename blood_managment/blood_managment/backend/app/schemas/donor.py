@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, UUID4
+from pydantic import BaseModel, ConfigDict, Field, UUID4, field_validator
 
 from app.models.donor import BloodGroup
 
@@ -27,6 +27,13 @@ class DonorUpdate(BaseModel):
     is_available: Optional[bool] = None
     city: Optional[str] = Field(None, max_length=100)
     last_donation_date: Optional[date] = None
+
+    @field_validator("is_available")
+    @classmethod
+    def reject_null_availability(cls, value: bool | None) -> bool:
+        if value is None:
+            raise ValueError("Availability cannot be null")
+        return value
 
 
 class DonorResponse(DonorBase):

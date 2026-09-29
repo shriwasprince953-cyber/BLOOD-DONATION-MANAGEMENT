@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.dependencies import AdminProfile, CurrentDonor, DbSession
 from app.schemas.donation_response import (
@@ -29,10 +29,11 @@ async def create_response(
 async def list_my_responses(
     db: DbSession,
     donor: CurrentDonor,
-    limit: int = 50,
-    offset: int = 0,
+    requirement_id: uuid.UUID | None = None,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
 ) -> DonationResponseListResponse:
-    items, total = await response_service.list_responses(db, donor_id=donor.profile_id, limit=limit, offset=offset)
+    items, total = await response_service.list_responses(db, donor_id=donor.profile_id, requirement_id=requirement_id, limit=limit, offset=offset)
     return DonationResponseListResponse(
         items=[DonationResponseResponse.model_validate(item) for item in items],
         total=total,
@@ -46,8 +47,8 @@ async def list_all_responses(
     db: DbSession,
     admin: AdminProfile,
     requirement_id: uuid.UUID | None = None,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
 ) -> DonationResponseListResponse:
     items, total = await response_service.list_responses(
         db,

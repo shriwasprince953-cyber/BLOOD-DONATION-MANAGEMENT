@@ -54,13 +54,13 @@ class BloodRequirement(Base):
     )
     
     blood_group: Mapped[BloodGroup] = mapped_column(
-        SQLEnum(BloodGroup, values_callable=lambda obj: [e.value for e in obj]),
+        SQLEnum(BloodGroup, name="blood_group", values_callable=lambda obj: [e.value for e in obj]),
         index=True, 
         nullable=False
     )
     units_required: Mapped[int] = mapped_column(Integer, nullable=False)
     urgency_level: Mapped[UrgencyLevel] = mapped_column(
-        SQLEnum(UrgencyLevel, values_callable=lambda obj: [e.value for e in obj]),
+        SQLEnum(UrgencyLevel, name="urgency_level", values_callable=lambda obj: [e.value for e in obj]),
         index=True, 
         nullable=False
     )
@@ -72,7 +72,7 @@ class BloodRequirement(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     
     status: Mapped[RequirementStatus] = mapped_column(
-        SQLEnum(RequirementStatus, values_callable=lambda obj: [e.value for e in obj]),
+        SQLEnum(RequirementStatus, name="requirement_status", values_callable=lambda obj: [e.value for e in obj]),
         default=RequirementStatus.OPEN, 
         index=True, 
         nullable=False

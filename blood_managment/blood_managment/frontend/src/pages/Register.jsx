@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import api from "../api/axios";
+import { ensureProfile } from "../lib/account";
 
 function Register() {
   const navigate = useNavigate();
@@ -20,11 +21,12 @@ function Register() {
 
     try {
       const { data, error: registerError } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
         options: {
+          emailRedirectTo: `${window.location.origin}/login`,
           data: {
-            full_name: name,
+            full_name: name.trim(),
           },
         },
       });
@@ -35,18 +37,14 @@ function Register() {
       }
 
       if (data.session) {
-        await api.post("/auth/register", {
-          full_name: name,
-          email,
-        });
+        await ensureProfile(api, data.user);
         navigate("/dashboard");
       } else {
-        navigate("/login");
+        navigate("/login", { state: { message: "Check your email to confirm your account, then sign in." } });
       }
     } catch (err) {
       console.warn("Unable to create account or application profile:", err);
-      await supabase.auth.signOut();
-      setError("Unable to complete account setup. Please try again.");
+      setError(`${err.message || "Unable to complete account setup."} If you already confirmed your email, sign in to finish setup.`);
     } finally {
       setLoading(false);
     }
@@ -96,6 +94,8 @@ function Register() {
                 placeholder="Your full name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
+                minLength={2}
+                maxLength={255}
                 required
               />
             </div>

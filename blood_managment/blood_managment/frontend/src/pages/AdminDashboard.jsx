@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import api from "../api/axios";
+import { mapRequirement } from "../lib/requirements";
 
 function Icon({ children }) {
   return <span className="dashboard-icon">{children}</span>;
@@ -18,15 +19,17 @@ function AdminDashboard() {
 
   // Stats
   const [stats, setStats] = useState({
-    totalRequests: 5,
-    activeRequests: 3,
-    totalDonors: 12,
+    totalRequests: null,
+    activeRequests: null,
+    totalDonors: null,
   });
 
   // Requirements List
   const [requirements, setRequirements] = useState([]);
 
   // Selected Request for viewing matched donors
+  const selectedReqRef = useRef(null);
+  const [loadError, setLoadError] = useState("");
   const [selectedReqId, setSelectedReqId] = useState(null);
   const [matchedDonors, setMatchedDonors] = useState([]);
   const [loadingDonors, setLoadingDonors] = useState(false);
@@ -56,85 +59,14 @@ function AdminDashboard() {
         setUserInitial(fullName.charAt(0).toUpperCase());
       }
 
-      // Fetch all requirements
-      try {
-        const res = await api.get("/requirements?limit=100");
-        if (res.data && res.data.items) {
-          const items = res.data.items.map(item => ({
-            id: item.id,
-            bloodGroup: item.blood_group,
-            patientName: item.patient_name,
-            hospital: item.hospital_name,
-            location: item.location,
-            units: item.units_required,
-            urgency: item.urgency_level,
-            status: item.status,
-            notes: item.notes,
-            posted: "Just now",
-          }));
-          setRequirements(items);
-          setStats({
-            totalRequests: items.length,
-            activeRequests: items.filter(i => i.status === "OPEN" || i.status === "IN_PROGRESS").length,
-            totalDonors: 15,
-          });
-        }
-      } catch (apiErr) {
-        console.warn("Backend API requirements fetch failed. Using local storage or default mock data:", apiErr);
-        const localReqs = JSON.parse(localStorage.getItem("temp_requirements") || "[]");
-        if (localReqs.length === 0) {
-          // Setup initial mock requirements if none exist
-          const defaultReqs = [
-            {
-              id: "1",
-              bloodGroup: "O-",
-              patientName: "Rajesh Kumar",
-              hospital: "City Care Hospital",
-              location: "Nagpur, Maharashtra",
-              units: 3,
-              urgency: "CRITICAL",
-              status: "OPEN",
-              notes: "Urgently needed for emergency bypass surgery.",
-              posted: "18 minutes ago",
-            },
-            {
-              id: "2",
-              bloodGroup: "A+",
-              patientName: "Aarti Sharma",
-              hospital: "Orange City Hospital",
-              location: "Nagpur, Maharashtra",
-              units: 2,
-              urgency: "NORMAL",
-              status: "OPEN",
-              notes: "Replacement donor required for operation scheduled next week.",
-              posted: "1 hour ago",
-            },
-            {
-              id: "3",
-              bloodGroup: "B+",
-              patientName: "Amit Patel",
-              hospital: "Wockhardt Hospital",
-              location: "Nagpur, Maharashtra",
-              units: 4,
-              urgency: "HIGH",
-              status: "IN_PROGRESS",
-              notes: "Platelet transfusion support.",
-              posted: "2 hours ago",
-            },
-          ];
-          localStorage.setItem("temp_requirements", JSON.stringify(defaultReqs));
-          setRequirements(defaultReqs);
-        } else {
-          setRequirements(localReqs);
-          setStats({
-            totalRequests: localReqs.length,
-            activeRequests: localReqs.filter(i => i.status === "OPEN" || i.status === "IN_PROGRESS").length,
-            totalDonors: 15,
-          });
-        }
-      }
-    } catch (err) {
-      console.error("Dashboard load failed:", err);
+      const [requests, counts] = await Promise.all([
+        api.get("/requirements?limit=100"), api.get("/admin/stats"),
+      ]);
+      setRequirements(requests.data.items.map(mapRequirement));
+      setStats(counts.data);
+      setLoadError("");
+    } catch (error) {
+      setLoadError(error.message);
     } finally {
       setLoading(false);
     }
@@ -146,67 +78,48 @@ function AdminDashboard() {
     });
   }, []);
 
-  // Fetch matched donors for a specific request
-  const handleViewMatchedDonors = async (reqId) => {
-    if (selectedReqId === reqId) {
-      setSelectedReqId(null);
-      setMatchedDonors([]);
-      return;
-    }
-
-    setSelectedReqId(reqId);
+  // Ignore late responses when the administrator selects another request.
+  const loadMatchedDonors = async (reqId) => {
     setLoadingDonors(true);
     try {
-      const res = await api.get(`/matching/requirements/${reqId}/donors`);
-      setMatchedDonors(res.data || []);
-    } catch (err) {
-      console.warn("Matching API failed. Generating mock matched donors based on requirement group:", err);
-      // Fallback: Generate mock matching donors
-      const req = requirements.find(r => r.id === reqId);
-      const allMockDonors = [
-        { profile_id: "d1", full_name: "Rahul Deshmukh", email: "rahul@gmail.com", phone_number: "+91 99887 76655", blood_group: req?.bloodGroup || "O-", city: "Nagpur", is_available: true, response_status: null, already_notified: false },
-        { profile_id: "d2", full_name: "Priya Sharma", email: "priya@gmail.com", phone_number: "+91 91234 56789", blood_group: req?.bloodGroup || "O-", city: "Nagpur", is_available: true, response_status: "PENDING", already_notified: true },
-        { profile_id: "d3", full_name: "Karan Singh", email: "karan@gmail.com", phone_number: "+91 98765 43210", blood_group: req?.bloodGroup || "O-", city: "Nagpur", is_available: false, response_status: null, already_notified: false },
-      ];
-
-      setMatchedDonors(allMockDonors.filter(d => d.blood_group === req?.bloodGroup));
+      const { data } = await api.get(`/matching/requirements/${reqId}/donors`);
+      if (selectedReqRef.current === reqId) setMatchedDonors(data);
+    } catch (error) {
+      if (selectedReqRef.current === reqId) {
+        setMatchedDonors([]);
+        setLoadError(error.message);
+      }
     } finally {
-      setLoadingDonors(false);
+      if (selectedReqRef.current === reqId) setLoadingDonors(false);
     }
   };
+  const handleViewMatchedDonors = async (reqId) => {
+    const next = selectedReqRef.current === reqId ? null : reqId;
+    selectedReqRef.current = next;
+    setSelectedReqId(next);
+    setMatchedDonors([]);
+    if (next) await loadMatchedDonors(next);
+  };
 
-  // Trigger Notifications to matched donors
   const handleNotifyDonors = async (reqId) => {
-    setNotificationStatus(prev => ({ ...prev, [reqId]: "Sending notifications..." }));
+    setNotificationStatus(prev => ({ ...prev, [reqId]: "Queueing notifications..." }));
     try {
-      const res = await api.post(`/matching/requirements/${reqId}/notify`);
-      setNotificationStatus(prev => ({
-        ...prev,
-        [reqId]: `Success: Notified ${res.data.queued_notifications} matching donors!`,
+      const { data } = await api.post(`/matching/requirements/${reqId}/notify`);
+      setNotificationStatus(prev => ({ ...prev,
+        [reqId]: `Queued ${data.queued_notifications} in-app notifications. ${data.skipped_existing_notifications} already queued.`,
       }));
-      // Refresh donors
-      setTimeout(() => handleViewMatchedDonors(reqId), 1000);
-    } catch (err) {
-      console.warn("Notification API failed. Simulating notification success:", err);
-      setNotificationStatus(prev => ({
-        ...prev,
-        [reqId]: "Success: 2 matching donors notified (Offline mode).",
-      }));
-      // Simulate status update
-      setMatchedDonors(prev => prev.map(d => ({ ...d, already_notified: true })));
+      if (selectedReqRef.current === reqId) await loadMatchedDonors(reqId);
+    } catch (error) {
+      setNotificationStatus(prev => ({ ...prev, [reqId]: error.message }));
     }
   };
 
-  // Update Requirement Status
   const handleUpdateStatus = async (reqId, newStatus) => {
     try {
       await api.patch(`/requirements/${reqId}`, { status: newStatus });
-      setRequirements(prev => prev.map(r => r.id === reqId ? { ...r, status: newStatus } : r));
-    } catch (err) {
-      console.warn("Status patch failed, updating local state:", err);
-      const updated = requirements.map(r => r.id === reqId ? { ...r, status: newStatus } : r);
-      setRequirements(updated);
-      localStorage.setItem("temp_requirements", JSON.stringify(updated));
+      await loadDashboardData();
+    } catch (error) {
+      setLoadError(error.message);
     }
   };
 
@@ -247,40 +160,7 @@ function AdminDashboard() {
         loadDashboardData();
       }
     } catch (err) {
-      console.warn("Failed posting blood requirement via API. Saving locally:", err);
-      // Offline local storage saving
-      const newReq = {
-        id: String(Date.now()),
-        bloodGroup: form.bloodGroup,
-        patientName: form.patientName,
-        hospital: form.hospitalName,
-        location: form.location,
-        units: Number(form.unitsRequired),
-        urgency: form.urgencyLevel,
-        status: "OPEN",
-        notes: form.notes,
-        posted: "Just now",
-      };
-
-      const updatedReqs = [newReq, ...requirements];
-      setRequirements(updatedReqs);
-      localStorage.setItem("temp_requirements", JSON.stringify(updatedReqs));
-
-      setMessage({ type: "success", text: "Posted successfully (Saved offline)." });
-      setForm({
-        patientName: "",
-        bloodGroup: "O-",
-        unitsRequired: 2,
-        urgencyLevel: "HIGH",
-        hospitalName: "",
-        location: "Nagpur, Maharashtra",
-        notes: "",
-      });
-      setStats(prev => ({
-        ...prev,
-        totalRequests: updatedReqs.length,
-        activeRequests: updatedReqs.filter(i => i.status === "OPEN" || i.status === "IN_PROGRESS").length,
-      }));
+      setMessage({ type: "error", text: err.message || "Unable to post this request. Please retry." });
     } finally {
       setFormSubmitting(false);
     }
@@ -358,6 +238,7 @@ function AdminDashboard() {
         </header>
 
         <div className="dashboard-content">
+          {loadError && <p role="alert" className="auth-error">{loadError}</p>}
           {/* Heading */}
           <section className="requirements-heading animate-fade-in-up">
             <div>
@@ -379,7 +260,7 @@ function AdminDashboard() {
                   <div className="stat-icon red">🩸</div>
                   <div>
                     <span>Total Requirements</span>
-                    <strong>{stats.totalRequests}</strong>
+                    <strong>{stats.totalRequests ?? "—"}</strong>
                   </div>
                   <small>Active & Fulfilled cases</small>
                 </div>
@@ -388,7 +269,7 @@ function AdminDashboard() {
                   <div className="stat-icon green">✓</div>
                   <div>
                     <span>Active Cases</span>
-                    <strong>{stats.activeRequests}</strong>
+                    <strong>{stats.activeRequests ?? "—"}</strong>
                   </div>
                   <small>Requires immediate donors</small>
                 </div>
@@ -397,7 +278,7 @@ function AdminDashboard() {
                   <div className="stat-icon orange">◉</div>
                   <div>
                     <span>Total Donors Available</span>
-                    <strong>{stats.totalDonors}</strong>
+                    <strong>{stats.totalDonors ?? "—"}</strong>
                   </div>
                   <small>In local registry</small>
                 </div>
@@ -493,19 +374,20 @@ function AdminDashboard() {
                           {selectedReqId === req.id && (
                             <div style={{ marginTop: "16px", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                                <h4 style={{ fontSize: "12px", fontWeight: "700" }}>Matched Local Donors ({req.bloodGroup})</h4>
+                                <h4 style={{ fontSize: "12px", fontWeight: "700" }}>Matched Donors ({req.bloodGroup})</h4>
                                 <button
                                   type="button"
                                   className="btn btn-primary"
                                   style={{ padding: "5px 10px", fontSize: "10px", borderRadius: "6px" }}
                                   onClick={() => handleNotifyDonors(req.id)}
+                                  disabled={notificationStatus[req.id] === "Queueing notifications..."}
                                 >
                                   Notify Matched Donors ✉
                                 </button>
                               </div>
 
                               {notificationStatus[req.id] && (
-                                <div style={{ fontSize: "11px", color: "var(--success)", fontWeight: 600, marginBottom: "8px" }}>
+                                <div role="status" style={{ fontSize: "11px", fontWeight: 600, marginBottom: "8px" }}>
                                   {notificationStatus[req.id]}
                                 </div>
                               )}
@@ -526,7 +408,7 @@ function AdminDashboard() {
                                       </div>
                                       <div style={{ textAlign: "right" }}>
                                         <span className={`badge ${d.already_notified ? "badge-success" : "badge-warning"}`} style={{ display: "inline-block", fontSize: "8px", padding: "2px 5px", margin: "2px" }}>
-                                          {d.already_notified ? "Notified" : "Not Notified"}
+                                          {d.already_notified ? "Queued" : "Not Queued"}
                                         </span>
                                         {d.response_status && (
                                           <span className="badge badge-danger" style={{ display: "inline-block", fontSize: "8px", padding: "2px 5px", margin: "2px", background: "var(--primary-light)", color: "var(--primary)" }}>

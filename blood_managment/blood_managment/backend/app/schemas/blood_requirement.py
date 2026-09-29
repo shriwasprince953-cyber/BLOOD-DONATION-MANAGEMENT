@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, UUID4
+from pydantic import BaseModel, ConfigDict, Field, UUID4, field_validator
 
 from app.models.blood_requirement import RequirementStatus, UrgencyLevel
 from app.models.donor import BloodGroup
@@ -9,6 +9,7 @@ from app.models.donor import BloodGroup
 
 class BloodRequirementBase(BaseModel):
     """Base fields shared across multiple BloodRequirement schemas."""
+    model_config = ConfigDict(str_strip_whitespace=True)
     blood_group: BloodGroup
     units_required: int = Field(..., gt=0, le=50, description="Number of units required (must be > 0)")
     urgency_level: UrgencyLevel
@@ -28,6 +29,7 @@ class BloodRequirementCreate(BloodRequirementBase):
 
 class BloodRequirementUpdate(BaseModel):
     """Schema for updating an existing Blood Requirement. All fields optional."""
+    model_config = ConfigDict(str_strip_whitespace=True)
     blood_group: Optional[BloodGroup] = None
     units_required: Optional[int] = Field(None, gt=0, le=50)
     urgency_level: Optional[UrgencyLevel] = None
@@ -36,6 +38,13 @@ class BloodRequirementUpdate(BaseModel):
     location: Optional[str] = Field(None, min_length=2, max_length=255)
     notes: Optional[str] = Field(None, max_length=1000)
     status: Optional[RequirementStatus] = None
+
+    @field_validator("blood_group", "units_required", "urgency_level", "patient_name", "hospital_name", "location", "status")
+    @classmethod
+    def reject_null_required_fields(cls, value):
+        if value is None:
+            raise ValueError("This field cannot be null")
+        return value
 
 
 class BloodRequirementResponse(BloodRequirementBase):

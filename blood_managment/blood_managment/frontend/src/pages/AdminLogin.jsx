@@ -19,7 +19,7 @@ function AdminLogin() {
 
     try {
       const { error: loginError } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       });
 
@@ -33,13 +33,12 @@ function AdminLogin() {
       if (res.data?.role === "ADMIN") {
         navigate("/admin");
       } else {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: "local" });
         setError("Access denied. Admin privileges required.");
       }
     } catch (err) {
       console.warn("API role fetch failed during admin login:", err);
-      await supabase.auth.signOut();
-      setError("Failed to verify admin privileges. Please try again.");
+      setError(err.message || "Failed to verify admin privileges. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -98,9 +97,9 @@ function AdminLogin() {
                   Password
                 </label>
 
-                <button type="button" className="forgot-password">
+                <Link to="/forgot-password" className="forgot-password">
                   Forgot password?
-                </button>
+                </Link>
               </div>
 
               <input

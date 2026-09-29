@@ -3,6 +3,7 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.models.donor import Donor
@@ -56,7 +57,11 @@ async def register_profile(
     if payload.donor is not None:
         db.add(Donor(profile_id=profile_id, **payload.donor.model_dump()))
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Profile is already registered.") from None
     return await get_profile(db, profile_id)  # type: ignore[return-value]
 
 

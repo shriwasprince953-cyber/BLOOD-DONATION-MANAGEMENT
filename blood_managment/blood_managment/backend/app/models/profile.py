@@ -41,7 +41,7 @@ class Profile(Base):
     
     # Role-based access control
     role: Mapped[UserRole] = mapped_column(
-        SQLEnum(UserRole, values_callable=lambda obj: [e.value for e in obj]),
+        SQLEnum(UserRole, name="user_role", values_callable=lambda obj: [e.value for e in obj]),
         default=UserRole.DONOR,
         nullable=False,
     )

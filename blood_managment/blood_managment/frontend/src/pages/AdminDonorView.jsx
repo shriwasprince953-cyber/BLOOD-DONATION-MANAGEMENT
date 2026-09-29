@@ -2,64 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import api from "../api/axios";
-
-const initialRequirements = [
-  {
-    id: 1,
-    bloodGroup: "O-",
-    title: "Urgent blood requirement",
-    hospital: "City Care Hospital",
-    location: "Nagpur, Maharashtra",
-    units: 3,
-    urgency: "URGENT",
-    posted: "18 minutes ago",
-    distance: "3.2 km",
-  },
-  {
-    id: 2,
-    bloodGroup: "A+",
-    title: "Blood donation needed",
-    hospital: "Orange City Hospital",
-    location: "Nagpur, Maharashtra",
-    units: 2,
-    urgency: "NORMAL",
-    posted: "1 hour ago",
-    distance: "5.8 km",
-  },
-  {
-    id: 3,
-    bloodGroup: "B+",
-    title: "Immediate blood requirement",
-    hospital: "Wockhardt Hospital",
-    location: "Nagpur, Maharashtra",
-    units: 4,
-    urgency: "HIGH",
-    posted: "2 hours ago",
-    distance: "7.1 km",
-  },
-  {
-    id: 4,
-    bloodGroup: "AB+",
-    title: "Blood required for surgery",
-    hospital: "Alexis Hospital",
-    location: "Nagpur, Maharashtra",
-    units: 2,
-    urgency: "HIGH",
-    posted: "3 hours ago",
-    distance: "8.4 km",
-  },
-  {
-    id: 5,
-    bloodGroup: "O+",
-    title: "Blood donation request",
-    hospital: "SevenStar Hospital",
-    location: "Nagpur, Maharashtra",
-    units: 1,
-    urgency: "NORMAL",
-    posted: "5 hours ago",
-    distance: "10.2 km",
-  },
-];
+import { mapRequirement } from "../lib/requirements";
 
 const bloodGroups = [
   "All",
@@ -79,66 +22,35 @@ function Icon({ children }) {
 
 function AdminDonorView() {
   const navigate = useNavigate();
-  const [requirements, setRequirements] = useState(initialRequirements);
+  const [requirements, setRequirements] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState("All");
   const [selectedUrgency, setSelectedUrgency] = useState("All");
   const [userName, setUserName] = useState("Admin User");
   const [userInitial, setUserInitial] = useState("A");
   const [loading, setLoading] = useState(true);
 
+  const [loadError, setLoadError] = useState("");
+
   useEffect(() => {
+    let active = true;
     async function loadData() {
       try {
-        setLoading(true);
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          const user = session.user;
-          const fullName = user.user_metadata?.full_name || localStorage.getItem("temp_fullName") || "Admin User";
-          setUserName(fullName);
-          setUserInitial(fullName.charAt(0).toUpperCase());
-        }
-
-        try {
-          const res = await api.get("/requirements?limit=100");
-          if (res.data && res.data.items) {
-            setRequirements(res.data.items.map(item => ({
-              id: item.id,
-              bloodGroup: item.blood_group,
-              title: `Blood Requirement for ${item.patient_name}`,
-              hospital: item.hospital_name,
-              location: item.location,
-              units: item.units_required,
-              urgency: item.urgency_level,
-              posted: "Just now",
-              distance: "Nearby",
-            })));
-          }
-        } catch (apiErr) {
-          console.warn("Backend API requirements call failed, using mock list:", apiErr);
-          // Fallback to local storage if API fails
-          const localReqs = JSON.parse(localStorage.getItem("temp_requirements") || "[]");
-          if (localReqs.length > 0) {
-            setRequirements(localReqs.map(req => ({
-              id: req.id,
-              bloodGroup: req.bloodGroup || req.blood_group,
-              title: req.title || `Blood Requirement for ${req.patientName || 'Unknown'}`,
-              hospital: req.hospital || req.hospital_name,
-              location: req.location,
-              units: req.units || req.units_required,
-              urgency: req.urgency || req.urgency_level,
-              posted: req.posted || "Just now",
-              distance: req.distance || "Nearby",
-            })));
-          }
-        }
-      } catch (err) {
-        console.error("Requirements load error:", err);
+        const { data: profile } = await api.get("/auth/me");
+        if (!active) return;
+        setUserName(profile.full_name);
+        setUserInitial(profile.full_name.charAt(0).toUpperCase());
+        const result = await api.get("/requirements?limit=100");
+        if (active) setRequirements(result.data.items.map(mapRequirement));
+      } catch (error) {
+        if (active) setLoadError(error.status === 403
+          ? "Complete your donor profile to see matching requests."
+          : error.message);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }
-
-    loadData();
+    void loadData();
+    return () => { active = false; };
   }, []);
 
   const handleLogout = async () => {
@@ -225,6 +137,7 @@ function AdminDonorView() {
         </header>
 
         <div className="dashboard-content animate-fade-in-up">
+          {loadError && <p className="auth-error" role="alert">{loadError}</p>}
           {/* Page heading */}
           <section className="requirements-heading">
             <div>
@@ -282,9 +195,10 @@ function AdminDonorView() {
                 className="urgency-select"
               >
                 <option value="All">All urgency levels</option>
-                <option value="URGENT">Urgent</option>
+                <option value="CRITICAL">Critical</option>
                 <option value="HIGH">High</option>
-                <option value="NORMAL">Normal</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
               </select>
             </div>
           </section>

@@ -48,12 +48,12 @@ class Notification(Base):
         nullable=False,
     )
     channel: Mapped[NotificationChannel] = mapped_column(
-        SQLEnum(NotificationChannel, values_callable=lambda obj: [e.value for e in obj]),
+        SQLEnum(NotificationChannel, name="notification_channel", values_callable=lambda obj: [e.value for e in obj]),
         default=NotificationChannel.IN_APP,
         nullable=False,
     )
     status: Mapped[NotificationStatus] = mapped_column(
-        SQLEnum(NotificationStatus, values_callable=lambda obj: [e.value for e in obj]),
+        SQLEnum(NotificationStatus, name="notification_status", values_callable=lambda obj: [e.value for e in obj]),
         default=NotificationStatus.QUEUED,
         index=True,
         nullable=False,

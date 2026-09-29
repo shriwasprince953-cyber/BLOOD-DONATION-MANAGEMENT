@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import api from "../api/axios";
+import { ensureProfile } from "../lib/account";
 
 function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,7 +21,7 @@ function Login() {
 
     try {
       const { data, error: loginError } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       });
 
@@ -29,19 +31,7 @@ function Login() {
         return;
       }
 
-      let res;
-      try {
-        res = await api.get("/auth/me");
-      } catch (profileError) {
-        if (profileError.status !== 403 || !data.user?.email) {
-          throw profileError;
-        }
-
-        res = await api.post("/auth/register", {
-          full_name: data.user.user_metadata?.full_name || data.user.email,
-          email: data.user.email,
-        });
-      }
+      const res = await ensureProfile(api, data.user);
 
       if (res.data?.role === "ADMIN") {
         navigate("/admin");
@@ -50,8 +40,7 @@ function Login() {
       }
     } catch (err) {
       console.warn("Unable to verify authenticated user profile:", err);
-      await supabase.auth.signOut();
-      setError("Unable to verify your account. Please try again.");
+      setError(err.message || "Unable to verify your account. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -112,9 +101,9 @@ function Login() {
                   Password
                 </label>
 
-                <button type="button" className="forgot-password">
+                <Link to="/forgot-password" className="forgot-password">
                   Forgot password?
-                </button>
+                </Link>
               </div>
 
               <input
@@ -128,6 +117,7 @@ function Login() {
               />
             </div>
 
+            {location.state?.message && <p role="status">{location.state.message}</p>}
             {error && (
               <div className="auth-error">
                 {error}

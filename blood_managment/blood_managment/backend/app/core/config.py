@@ -29,7 +29,11 @@ class Settings(BaseSettings):
     AUTO_CREATE_TABLES: bool = False
 
     # CORS Configuration
-    CORS_ORIGINS: Annotated[list[str], NoDecode] = []
+    CORS_ORIGINS: Annotated[list[str], NoDecode] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://blood-donation-management-prince-8dae.vercel.app",
+    ]
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

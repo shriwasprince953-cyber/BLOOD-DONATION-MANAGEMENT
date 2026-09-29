@@ -10,12 +10,13 @@ const RequirementDetail = lazy(() => import("./pages/RequirementDetail"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDonorView = lazy(() => import("./pages/AdminDonorView"));
+const PasswordRecovery = lazy(() => import("./pages/PasswordRecovery"));
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="auth-page" role="status">Loading...</div>}>
         <Routes>
           <Route
             path="/"
@@ -23,6 +24,8 @@ function App() {
           />
 
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<PasswordRecovery />} />
+          <Route path="/reset-password" element={<PasswordRecovery reset />} />
 
           <Route
             path="/register"
@@ -46,7 +49,7 @@ function App() {
 
           <Route
             path="/profile"
-            element={<ProtectedRoute requiredRole="DONOR"><Profile /></ProtectedRoute>}
+            element={<ProtectedRoute><Profile /></ProtectedRoute>}
           />
 
           <Route

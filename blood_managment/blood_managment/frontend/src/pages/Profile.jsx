@@ -17,7 +17,7 @@ function Profile() {
   });
 
   const [donor, setDonor] = useState({
-    bloodGroup: "O+",
+    bloodGroup: "",
     city: "",
     isAvailable: true,
     lastDonationDate: "",
@@ -28,65 +28,33 @@ function Profile() {
   const [message, setMessage] = useState({ type: "", text: "" });
   const [userInitial, setUserInitial] = useState("U");
 
+  const [hasDonor, setHasDonor] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+
   useEffect(() => {
+    let active = true;
     async function loadData() {
       try {
-        setFetching(true);
-        // Get Supabase user session
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          const user = session.user;
-          const initial = user.user_metadata?.full_name
-            ? user.user_metadata.full_name.charAt(0).toUpperCase()
-            : user.email.charAt(0).toUpperCase();
-          setUserInitial(initial);
-
-          // Attempt to fetch from backend API
-          try {
-            const res = await api.get("/auth/me");
-            if (res.data) {
-              setProfile({
-                fullName: res.data.full_name || user.user_metadata?.full_name || "",
-                email: res.data.email || user.email || "",
-                phoneNumber: res.data.phone_number || "",
-              });
-              if (res.data.donor) {
-                setDonor({
-                  bloodGroup: res.data.donor.blood_group || "O+",
-                  city: res.data.donor.city || "",
-                  isAvailable: res.data.donor.is_available ?? true,
-                  lastDonationDate: res.data.donor.last_donation_date || "",
-                });
-              } else {
-                setDonor(prev => ({
-                  ...prev,
-                  city: localStorage.getItem("temp_city") || "",
-                }));
-              }
-            }
-          } catch (apiErr) {
-            console.warn("Backend API error, falling back to local session data:", apiErr);
-            setProfile({
-              fullName: localStorage.getItem("temp_fullName") || user.user_metadata?.full_name || "Prince",
-              email: user.email || "",
-              phoneNumber: localStorage.getItem("temp_phoneNumber") || "",
-            });
-            setDonor({
-              bloodGroup: localStorage.getItem("temp_bloodGroup") || "O-",
-              city: localStorage.getItem("temp_city") || "Nagpur, Maharashtra",
-              isAvailable: JSON.parse(localStorage.getItem("temp_isAvailable") ?? "true"),
-              lastDonationDate: localStorage.getItem("temp_lastDonationDate") || "",
-            });
-          }
+        const { data } = await api.get("/auth/me");
+        if (!active) return;
+        setProfile({ fullName: data.full_name, email: data.email, phoneNumber: data.phone_number || "" });
+        setUserInitial(data.full_name.charAt(0).toUpperCase());
+        setHasDonor(Boolean(data.donor));
+        if (data.donor) setDonor({
+          bloodGroup: data.donor.blood_group, city: data.donor.city || "",
+          isAvailable: data.donor.is_available, lastDonationDate: data.donor.last_donation_date || "",
+        });
+      } catch (error) {
+        if (active) {
+          setLoadFailed(true);
+          setMessage({ type: "error", text: error.message });
         }
-      } catch (err) {
-        console.error("Error loading user session:", err);
       } finally {
-        setFetching(false);
+        if (active) setFetching(false);
       }
     }
-
-    loadData();
+    void loadData();
+    return () => { active = false; };
   }, []);
 
   const handleProfileChange = (e) => {
@@ -107,43 +75,24 @@ function Profile() {
     setLoading(true);
     setMessage({ type: "", text: "" });
 
-    // Store locally as fallback
-    localStorage.setItem("temp_fullName", profile.fullName);
-    localStorage.setItem("temp_phoneNumber", profile.phoneNumber);
-    localStorage.setItem("temp_bloodGroup", donor.bloodGroup);
-    localStorage.setItem("temp_city", donor.city);
-    localStorage.setItem("temp_isAvailable", String(donor.isAvailable));
-    localStorage.setItem("temp_lastDonationDate", donor.lastDonationDate);
-
     try {
       await api.patch("/auth/me", {
-        full_name: profile.fullName,
-        phone_number: profile.phoneNumber,
+        full_name: profile.fullName.trim(), phone_number: profile.phoneNumber || null,
       });
-
-      try {
-        await api.get("/donors/me");
-        await api.patch("/donors/me", {
-          is_available: donor.isAvailable,
-          city: donor.city,
-          last_donation_date: donor.lastDonationDate || null,
-        });
-      } catch {
-        await api.post("/donors/me", {
-          blood_group: donor.bloodGroup,
-          is_available: donor.isAvailable,
-          city: donor.city,
-          last_donation_date: donor.lastDonationDate || null,
-        });
+      const payload = {
+        is_available: donor.isAvailable, city: donor.city || null,
+        last_donation_date: donor.lastDonationDate || null,
+      };
+      if (hasDonor) {
+        await api.patch("/donors/me", payload);
+      } else {
+        await api.post("/donors/me", { ...payload, blood_group: donor.bloodGroup });
+        setHasDonor(true);
       }
-
+      setUserInitial(profile.fullName.trim().charAt(0).toUpperCase());
       setMessage({ type: "success", text: "Profile updated successfully!" });
-    } catch (err) {
-      console.warn("Backend save failed, saved locally instead:", err);
-      setMessage({
-        type: "success",
-        text: "Profile saved locally (Offline mode).",
-      });
+    } catch (error) {
+      setMessage({ type: "error", text: `Could not save all profile details. ${error.message}` });
     } finally {
       setLoading(false);
     }
@@ -260,6 +209,8 @@ function Profile() {
                       name="fullName"
                       type="text"
                       className="input"
+                      minLength={2}
+                      maxLength={255}
                       value={profile.fullName}
                       onChange={handleProfileChange}
                       required
@@ -293,6 +244,7 @@ function Profile() {
                       type="tel"
                       className="input"
                       placeholder="e.g. +91 98765 43210"
+                      maxLength={20}
                       value={profile.phoneNumber}
                       onChange={handleProfileChange}
                     />
@@ -309,8 +261,11 @@ function Profile() {
                       className="urgency-select"
                       style={{ width: "100%", height: "48px" }}
                       value={donor.bloodGroup}
+                      disabled={hasDonor}
+                      required
                       onChange={handleDonorChange}
                     >
+                      <option value="" disabled>Select your blood group</option>
                       {bloodGroups.map((group) => (
                         <option key={group} value={group}>
                           {group}
@@ -319,6 +274,7 @@ function Profile() {
                     </select>
                   </div>
 
+                  {hasDonor && <p>Blood group is locked after registration. Contact an administrator for corrections.</p>}
                   {/* City */}
                   <div className="input-group">
                     <label className="input-label" htmlFor="city">
@@ -330,6 +286,7 @@ function Profile() {
                       type="text"
                       className="input"
                       placeholder="e.g. Nagpur, Maharashtra"
+                      maxLength={100}
                       value={donor.city}
                       onChange={handleDonorChange}
                     />
@@ -380,7 +337,7 @@ function Profile() {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={loading}
+                  disabled={loading || loadFailed}
                   style={{ alignSelf: "flex-end", minWidth: "150px" }}
                 >
                   {loading ? "Saving..." : "Save Profile"}

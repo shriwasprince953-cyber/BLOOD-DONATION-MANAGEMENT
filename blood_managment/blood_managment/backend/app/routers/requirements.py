@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.dependencies import AdminProfile, DbSession
 from app.models.blood_requirement import RequirementStatus
@@ -19,8 +19,8 @@ router = APIRouter(prefix="/requirements", tags=["requirements"])
 async def list_requirements(
     db: DbSession,
     status: RequirementStatus | None = None,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
 ) -> BloodRequirementListResponse:
     items, total = await requirement_service.list_requirements(db, status, limit, offset)
     return BloodRequirementListResponse(

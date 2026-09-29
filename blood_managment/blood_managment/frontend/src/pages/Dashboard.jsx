@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import api from "../api/axios";
+import { mapRequirement } from "../lib/requirements";
 
 function Icon({ children }) {
   return <span className="dashboard-icon">{children}</span>;
@@ -9,84 +10,33 @@ function Icon({ children }) {
 
 function Dashboard() {
   const navigate = useNavigate();
-  const [userName, setUserName] = useState("Prince");
-  const [userInitial, setUserInitial] = useState("S");
-  const [requirements, setRequirements] = useState([
-    {
-      id: "1",
-      bloodGroup: "O-",
-      title: "Urgent blood requirement",
-      hospital: "City Care Hospital",
-      location: "Nagpur, Maharashtra",
-      units: 3,
-      urgency: "URGENT",
-      posted: "18 minutes ago",
-    },
-    {
-      id: "2",
-      bloodGroup: "A+",
-      title: "Blood donation needed",
-      hospital: "Orange City Hospital",
-      location: "Nagpur, Maharashtra",
-      units: 2,
-      urgency: "NORMAL",
-      posted: "1 hour ago",
-    },
-  ]);
+  const [userName, setUserName] = useState("Donor");
+  const [userInitial, setUserInitial] = useState("D");
+  const [requirements, setRequirements] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadSession() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          const user = session.user;
-          const fullName = user.user_metadata?.full_name || localStorage.getItem("temp_fullName") || "Prince";
-          setUserName(fullName);
-          const initial = fullName.charAt(0).toUpperCase();
-          setUserInitial(initial);
-        }
+  const [loadError, setLoadError] = useState("");
 
-        // Try to fetch real matching requirements for donor
-        try {
-          const res = await api.get("/donors/me/requirements");
-          if (res.data && res.data.length > 0) {
-            setRequirements(res.data.map(item => ({
-              id: item.id,
-              bloodGroup: item.blood_group,
-              title: `Blood Requirement for ${item.patient_name}`,
-              hospital: item.hospital_name,
-              location: item.location,
-              units: item.units_required,
-              urgency: item.urgency_level,
-              posted: "Just now",
-            })));
-          }
-        } catch (apiErr) {
-          console.warn("Backend API matching requirements call failed, using mock list:", apiErr);
-          const localReqs = JSON.parse(localStorage.getItem("temp_requirements") || "[]");
-          if (localReqs.length > 0) {
-            setRequirements(localReqs.map(req => ({
-              id: req.id,
-              bloodGroup: req.bloodGroup || req.blood_group,
-              title: req.title || `Blood Requirement for ${req.patientName || 'Unknown'}`,
-              hospital: req.hospital || req.hospital_name,
-              location: req.location,
-              units: req.units || req.units_required,
-              urgency: req.urgency || req.urgency_level,
-              posted: req.posted || "Just now",
-              distance: req.distance || "Nearby",
-            })));
-          }
-        }
-      } catch (err) {
-        console.error("Session error:", err);
+  useEffect(() => {
+    let active = true;
+    async function loadData() {
+      try {
+        const { data: profile } = await api.get("/auth/me");
+        if (!active) return;
+        setUserName(profile.full_name);
+        setUserInitial(profile.full_name.charAt(0).toUpperCase());
+        const result = await api.get("/donors/me/requirements?limit=100");
+        if (active) setRequirements(result.data.map(mapRequirement));
+      } catch (error) {
+        if (active) setLoadError(error.status === 403
+          ? "Complete your donor profile to see matching requests."
+          : error.message);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }
-
-    loadSession();
+    void loadData();
+    return () => { active = false; };
   }, []);
 
   const handleLogout = async () => {
@@ -178,6 +128,7 @@ function Dashboard() {
         </header>
 
         <div className="dashboard-content animate-fade-in-up">
+          {loadError && <p className="auth-error" role="alert">{loadError}</p>}
           {/* Welcome */}
           <section className="welcome-section">
             <div>
@@ -208,7 +159,7 @@ function Dashboard() {
 
               <div>
                 <span>Total Donations</span>
-                <strong>0</strong>
+                <strong>—</strong>
               </div>
 
               <small>Keep making a difference</small>
@@ -221,7 +172,7 @@ function Dashboard() {
 
               <div>
                 <span>Lives Impacted</span>
-                <strong>0</strong>
+                <strong>—</strong>
               </div>
 
               <small>Every donation matters</small>
@@ -263,8 +214,8 @@ function Dashboard() {
                   <div className="spinner" style={{ borderTopColor: "var(--primary)" }}></div>
                 </div>
               ) : (
-                requirements.map((req) => (
-                  <article key={req.id} className={`request-card ${req.urgency === "URGENT" || req.urgency === "HIGH" ? "urgent" : ""}`}>
+                requirements.length === 0 ? <p>No matching requests. Complete your profile or check back later.</p> : requirements.map((req) => (
+                  <article key={req.id} className={`request-card ${req.urgency === "CRITICAL" || req.urgency === "HIGH" ? "urgent" : ""}`}>
                     <div className="request-top">
                       <div className="blood-group">
                         <span>{req.bloodGroup}</span>
@@ -276,7 +227,7 @@ function Dashboard() {
                           <span>Posted {req.posted}</span>
                         </div>
 
-                        <span className={req.urgency === "URGENT" || req.urgency === "HIGH" ? "urgency-badge" : "normal-badge"}>
+                        <span className={req.urgency === "CRITICAL" || req.urgency === "HIGH" ? "urgency-badge" : "normal-badge"}>
                           {req.urgency}
                         </span>
                       </div>
@@ -320,56 +271,10 @@ function Dashboard() {
               )}
             </div>
 
-            {/* Profile Progress Card */}
             <aside className="profile-progress-card">
-              <div className="profile-card-header">
-                <div>
-                  <span className="section-eyebrow">
-                    YOUR PROFILE
-                  </span>
-
-                  <h2>Almost there</h2>
-                </div>
-
-                <div className="progress-circle">
-                  <span>72%</span>
-                </div>
-              </div>
-
-              <p>
-                Complete your donor profile so we can
-                connect you with the right requests.
-              </p>
-
-              <div className="progress-track">
-                <div className="progress-value" />
-              </div>
-
-              <div className="profile-checks">
-                <div className="completed">
-                  <span>✓</span>
-                  Basic information
-                </div>
-
-                <div className="completed">
-                  <span>✓</span>
-                  Contact details
-                </div>
-
-                <div>
-                  <span>○</span>
-                  Blood information
-                </div>
-
-                <div>
-                  <span>○</span>
-                  Location
-                </div>
-              </div>
-
-              <Link to="/profile" className="complete-profile">
-                Complete profile →
-              </Link>
+              <h2>Your donor profile</h2>
+              <p>Keep your contact details, blood group and availability up to date.</p>
+              <Link to="/profile" className="complete-profile">Review profile</Link>
             </aside>
           </section>
         </div>
