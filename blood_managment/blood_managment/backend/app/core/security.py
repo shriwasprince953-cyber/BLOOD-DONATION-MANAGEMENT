@@ -22,7 +22,11 @@ ISSUER = f"{supabase_url}/auth/v1"
 
 # PyJWKClient natively fetches and caches JWKS.
 # It automatically handles key rotation by querying the endpoint again if an unknown 'kid' is encountered.
-jwks_client = PyJWKClient(JWKS_URL, timeout=10)
+jwks_client = PyJWKClient(
+    JWKS_URL,
+    timeout=10,
+    headers={"apikey": settings.SUPABASE_ANON_KEY},
+)
 ALLOWED_JWT_ALGORITHMS = {"RS256", "ES256", "EdDSA"}
 
 
