@@ -5,7 +5,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-# Supabase provides a standard postgresql:// URL, but SQLAlchemy async requires the asyncpg driver
+# Supabase provides a standard postgresql URL, but SQLAlchemy async requires the asyncpg driver
 db_url = settings.DATABASE_URL
 if db_url.startswith("postgresql://"):
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
