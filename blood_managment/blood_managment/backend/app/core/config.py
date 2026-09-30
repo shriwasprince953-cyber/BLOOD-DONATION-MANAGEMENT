@@ -33,6 +33,7 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "https://blood-donation-management-prince-8dae.vercel.app",
+        "https://blood-donation-management-hryq.vercel.app",
     ]
 
     @field_validator("CORS_ORIGINS", mode="before")
