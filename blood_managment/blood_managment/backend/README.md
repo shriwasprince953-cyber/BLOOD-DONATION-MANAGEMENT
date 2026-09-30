@@ -44,8 +44,18 @@ In Supabase Auth URL Configuration, allow the frontend `/login` and `/reset-pass
 
 Install `requirements-dev.txt`, then run `python -m pytest tests -q`. Tests use a separate in-memory SQLite database and mocked authentication, never production data. Real Supabase email delivery, live Postgres and deployed CORS still require integration verification.
 
-ORM enum names now match the SQL migration below. Databases created with earlier `AUTO_CREATE_TABLES` versions may use names without underscores; inspect and migrate those enum types before deploying. No live database changes are applied automatically.
+ORM enum names match the SQL migrations below. Databases created with earlier `AUTO_CREATE_TABLES` versions may use names without underscores. No live database changes are applied automatically.
 
 ## Database
 
-For local development you can set `AUTO_CREATE_TABLES=true` once to create tables automatically. For production, keep it `false` and apply [migrations/001_initial_schema.sql](/D:/client_projects/blood_managment/backend/migrations/001_initial_schema.sql) in Supabase/Postgres.
+For local development you can set `AUTO_CREATE_TABLES=true` once to create tables automatically. For production, keep it `false` and apply [migrations/001_initial_schema.sql](migrations/001_initial_schema.sql) in Supabase/Postgres for a new database. Creating tables with `IF NOT EXISTS` does not repair the types of columns that already exist.
+
+### Repair existing enum mismatches
+
+If logs report missing types such as `requirement_status`, or `bloodgroup` versus `blood_group`, run the entire [migrations/002_reconcile_enum_types.sql](migrations/002_reconcile_enum_types.sql) file in the Supabase SQL Editor for the backend's database. It reconciles all seven enum types across eight columns, including databases where the donor blood-group column has already been fixed.
+
+The migration creates missing target enum types, validates existing target labels and stored values, converts legacy blood-group labels such as `A_POS` to `A+`, and preserves existing defaults. Already-correct columns are skipped. It does not delete application records or drop legacy enum types. Missing tables/columns, unknown values, incompatible target enums, or blocking dependencies abort the transaction; inspect the error instead of deleting types or columns. This does not reconstruct previously deleted columns or their data.
+
+Run during a quiet period: the transaction locks the five affected tables, with a five-second lock timeout and a two-minute statement timeout. Successful execution returns eight rows with `status = OK`. Restart the Render backend afterward to clear pooled asyncpg connections/type caches, then retry donor registration, requirements listing, and the admin dashboard. Keep `AUTO_CREATE_TABLES=false` in production; future schema changes need migrations.
+
+To validate the migration locally, install PostgreSQL command-line tools on PATH and run `python tests/check_enum_migration.py`. This uses a new temporary local PostgreSQL cluster and never reads `DATABASE_URL`. It checks legacy and current schemas, partial repairs, repeat execution, defaults, preservation of records, and rollback on incompatible data/schema.
