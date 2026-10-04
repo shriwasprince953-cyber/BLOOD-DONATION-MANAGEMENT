@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Query
 
 from app.dependencies import CurrentDonor, CurrentProfile, DbSession
-from app.schemas.blood_requirement import BloodRequirementResponse
+from app.schemas.blood_requirement import BloodRequirementResponse, BloodRequirementListResponse
+from app.models.blood_requirement import UrgencyLevel
 from app.schemas.donor import DonorCreate, DonorResponse, DonorUpdate
-from app.services import donor_service, matching_service
+from app.services import donor_service, matching_service, requirement_service
 
 router = APIRouter(prefix="/donors", tags=["donors"])
 
@@ -42,3 +43,15 @@ async def list_matching_requirements_for_me(
 ) -> list[BloodRequirementResponse]:
     requirements = await matching_service.visible_requirements_for_donor(db, donor, limit, offset)
     return [BloodRequirementResponse.model_validate(item) for item in requirements]
+
+
+@router.get("/me/requirements/page", response_model=BloodRequirementListResponse)
+async def matching_requirements_page(
+    db: DbSession, donor: CurrentDonor,
+    limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0),
+    urgency: UrgencyLevel | None = None,
+) -> BloodRequirementListResponse:
+    items, total = await requirement_service.list_requirements(
+        db, limit=limit, offset=offset, active_only=True, blood_group=donor.blood_group, urgency=urgency,
+    )
+    return BloodRequirementListResponse(items=items, total=total, limit=limit, offset=offset)

@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import api from "../api/axios";
 import { mapRequirement } from "../lib/requirements";
+import AdminUsers from "../components/AdminUsers";
+import Pagination from "../components/Pagination";
 
 function Icon({ children }) {
   return <span className="dashboard-icon">{children}</span>;
@@ -16,6 +18,11 @@ function AdminDashboard() {
   const [userName, setUserName] = useState("Admin User");
   const [userInitial, setUserInitial] = useState("A");
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [requestOffset, setRequestOffset] = useState(0);
+  const [requestTotal, setRequestTotal] = useState(0);
+  const dashboardRun = useRef(0);
+  const matchRun = useRef(0);
 
   // Stats
   const [stats, setStats] = useState({
@@ -33,6 +40,7 @@ function AdminDashboard() {
   const [selectedReqId, setSelectedReqId] = useState(null);
   const [matchedDonors, setMatchedDonors] = useState([]);
   const [loadingDonors, setLoadingDonors] = useState(false);
+  const [donorError, setDonorError] = useState("");
 
   // Form State for creating requirement
   const [form, setForm] = useState({
@@ -49,48 +57,52 @@ function AdminDashboard() {
   const [notificationStatus, setNotificationStatus] = useState({}); // { reqId: "Success msg" }
   const [message, setMessage] = useState({ type: "", text: "" });
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async (signal) => {
+    if (signal?.aborted) return;
+    const run = ++dashboardRun.current;
+    setLoading(true);
+    setLoadError("");
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const user = session.user;
-        const fullName = user.user_metadata?.full_name || "Admin User";
-        setUserName(fullName);
-        setUserInitial(fullName.charAt(0).toUpperCase());
-      }
-
-      const [requests, counts] = await Promise.all([
-        api.get("/requirements?limit=100"), api.get("/admin/stats"),
+      const [requests, counts, profile] = await Promise.all([
+        api.get(`/requirements?limit=20&offset=${requestOffset}`, { signal }), api.get("/admin/stats", { signal }), api.get("/auth/me", { signal }),
       ]);
+      if (run !== dashboardRun.current || signal?.aborted) return;
+      setUserName(profile.data.full_name);
+      setUserInitial(profile.data.full_name.charAt(0).toUpperCase());
       setRequirements(requests.data.items.map(mapRequirement));
+      setRequestTotal(requests.data.total);
       setStats(counts.data);
       setLoadError("");
     } catch (error) {
-      setLoadError(error.message);
+      if (run === dashboardRun.current && !signal?.aborted) setLoadError(error.message);
     } finally {
-      setLoading(false);
+      if (run === dashboardRun.current && !signal?.aborted) setLoading(false);
     }
-  };
+  }, [requestOffset]);
 
   useEffect(() => {
+    const controller = new AbortController();
     queueMicrotask(() => {
-      void loadDashboardData();
+      void loadDashboardData(controller.signal);
     });
-  }, []);
+    return () => controller.abort();
+  }, [loadDashboardData, refreshKey]);
 
   // Ignore late responses when the administrator selects another request.
   const loadMatchedDonors = async (reqId) => {
+    const run = ++matchRun.current;
     setLoadingDonors(true);
+    setDonorError("");
     try {
       const { data } = await api.get(`/matching/requirements/${reqId}/donors`);
-      if (selectedReqRef.current === reqId) setMatchedDonors(data);
+      if (selectedReqRef.current === reqId && run === matchRun.current) setMatchedDonors(data);
     } catch (error) {
-      if (selectedReqRef.current === reqId) {
+      if (selectedReqRef.current === reqId && run === matchRun.current) {
         setMatchedDonors([]);
-        setLoadError(error.message);
+        setDonorError(error.message);
       }
     } finally {
-      if (selectedReqRef.current === reqId) setLoadingDonors(false);
+      if (selectedReqRef.current === reqId && run === matchRun.current) setLoadingDonors(false);
     }
   };
   const handleViewMatchedDonors = async (reqId) => {
@@ -98,6 +110,7 @@ function AdminDashboard() {
     selectedReqRef.current = next;
     setSelectedReqId(next);
     setMatchedDonors([]);
+    setDonorError("");
     if (next) await loadMatchedDonors(next);
   };
 
@@ -238,7 +251,8 @@ function AdminDashboard() {
         </header>
 
         <div className="dashboard-content">
-          {loadError && <p role="alert" className="auth-error">{loadError}</p>}
+          {loadError && <div role="alert" className="auth-error"><p>{loadError}</p>
+            <button type="button" className="btn btn-secondary" onClick={() => setRefreshKey(n => n + 1)}>Retry dashboard</button></div>}
           {/* Heading */}
           <section className="requirements-heading animate-fade-in-up">
             <div>
@@ -246,13 +260,18 @@ function AdminDashboard() {
               <h1>Admin Dashboard</h1>
               <p>Post emergency blood requirements, match registered donors, and dispatch alert notifications.</p>
             </div>
+            <button type="button" className="btn btn-secondary" disabled={loading} onClick={() => {
+              selectedReqRef.current = null; setSelectedReqId(null); setRefreshKey(n => n + 1);
+            }}>Refresh data</button>
           </section>
+
+          <AdminUsers refreshKey={refreshKey} />
 
           {loading ? (
             <div style={{ display: "grid", placeItems: "center", padding: "80px 0" }}>
               <div className="spinner" style={{ borderTopColor: "var(--primary)" }}></div>
             </div>
-          ) : (
+          ) : loadError ? null : (
             <div className="animate-fade-in-up delay-1">
               {/* Stats Grid */}
               <section className="stats-grid">
@@ -262,7 +281,7 @@ function AdminDashboard() {
                     <span>Total Requirements</span>
                     <strong>{stats.totalRequests ?? "—"}</strong>
                   </div>
-                  <small>Active & Fulfilled cases</small>
+                  <small>All request statuses</small>
                 </div>
 
                 <div className="stat-card">
@@ -277,11 +296,13 @@ function AdminDashboard() {
                 <div className="stat-card">
                   <div className="stat-icon orange">◉</div>
                   <div>
-                    <span>Total Donors Available</span>
+                    <span>Registered Donors</span>
                     <strong>{stats.totalDonors ?? "—"}</strong>
                   </div>
-                  <small>In local registry</small>
+                  <small>Donor profiles saved</small>
                 </div>
+                <div className="stat-card"><div><span>Total Users</span><strong>{stats.totalUsers ?? "—"}</strong></div><small>Includes pending accounts</small></div>
+                <div className="stat-card"><div><span>Available Donors</span><strong>{stats.availableDonors ?? "—"}</strong></div><small>Availability switched on</small></div>
               </section>
 
               {/* Main Workspace */}
@@ -290,7 +311,7 @@ function AdminDashboard() {
                 <div className="requests-section">
                   <div className="section-heading">
                     <div>
-                      <span className="section-eyebrow">ACTIVE POSTS</span>
+                      <span className="section-eyebrow">ALL POSTS</span>
                       <h2>Blood Requirements Management</h2>
                     </div>
                   </div>
@@ -380,7 +401,7 @@ function AdminDashboard() {
                                   className="btn btn-primary"
                                   style={{ padding: "5px 10px", fontSize: "10px", borderRadius: "6px" }}
                                   onClick={() => handleNotifyDonors(req.id)}
-                                  disabled={notificationStatus[req.id] === "Queueing notifications..."}
+                                  disabled={loadingDonors || Boolean(donorError) || !matchedDonors.length || !["OPEN", "IN_PROGRESS"].includes(req.status) || notificationStatus[req.id] === "Queueing notifications..."}
                                 >
                                   Notify Matched Donors ✉
                                 </button>
@@ -392,19 +413,22 @@ function AdminDashboard() {
                                 </div>
                               )}
 
+                              <p>Exact blood group, availability on. All cities; no distance filter.</p>
                               {loadingDonors ? (
                                 <div style={{ display: "grid", placeItems: "center", padding: "12px" }}>
                                   <div className="spinner" style={{ borderTopColor: "var(--primary)" }}></div>
                                 </div>
+                              ) : donorError ? (
+                                <div role="alert"><p>{donorError}</p><button type="button" className="btn btn-secondary" onClick={() => loadMatchedDonors(req.id)}>Retry matches</button></div>
                               ) : matchedDonors.length === 0 ? (
-                                <p style={{ fontSize: "11px", color: "var(--text-muted)" }}>No matching available donors found in this location.</p>
+                                <p style={{ fontSize: "11px", color: "var(--text-muted)" }}>No available donors registered with blood group {req.bloodGroup}.</p>
                               ) : (
                                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                                   {matchedDonors.map((d) => (
                                     <div key={d.profile_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "white", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "11px" }}>
                                       <div>
-                                        <strong>{d.full_name}</strong> ({d.blood_group}) - {d.city}
-                                        <div style={{ color: "var(--text-secondary)", fontSize: "10px" }}>{d.phone_number} | {d.email}</div>
+                                        <strong>{d.full_name}</strong> ({d.blood_group}) - {d.city || "City not provided"}
+                                        <div style={{ color: "var(--text-secondary)", fontSize: "10px" }}>{d.phone_number || "Phone not provided"} | {d.email}</div>
                                       </div>
                                       <div style={{ textAlign: "right" }}>
                                         <span className={`badge ${d.already_notified ? "badge-success" : "badge-warning"}`} style={{ display: "inline-block", fontSize: "8px", padding: "2px 5px", margin: "2px" }}>
@@ -426,13 +450,16 @@ function AdminDashboard() {
                       </article>
                     ))
                   )}
+                  <Pagination offset={requestOffset} limit={20} total={requestTotal} onChange={value => {
+                    selectedReqRef.current = null; setSelectedReqId(null); setRequestOffset(value);
+                  }} />
                 </div>
 
                 {/* Form Panel */}
                 <aside className="profile-progress-card animate-fade-in-up" style={{ alignSelf: "start" }}>
                   <h3 style={{ fontSize: "18px", fontWeight: "700" }}>Post Emergency Blood Request</h3>
                   <p style={{ marginTop: "6px", fontSize: "12px", color: "var(--text-secondary)", lineHeight: "1.5" }}>
-                    Filing a requirement triggers matches across matching blood groups in the local database.
+                    Post a request, then use Find Matches to view available donors with the exact blood group across all cities.
                   </p>
 
                   <form onSubmit={handleCreateRequirement} className="auth-form" style={{ marginTop: "20px", gap: "16px" }}>
@@ -572,7 +599,7 @@ function AdminDashboard() {
           <span>⚙</span>
           Admin
         </Link>
-        <Link to="/requirements" className="mobile-nav-item">
+        <Link to="/admin/donor-view" className="mobile-nav-item">
           <span>♥</span>
           Requests
         </Link>

@@ -3,7 +3,8 @@ import uuid
 from fastapi import APIRouter, Query
 
 from app.dependencies import AdminProfile, DbSession
-from app.models.blood_requirement import RequirementStatus
+from app.models.blood_requirement import RequirementStatus, UrgencyLevel
+from app.models.donor import BloodGroup
 from app.schemas.blood_requirement import (
     BloodRequirementCreate,
     BloodRequirementListResponse,
@@ -21,8 +22,13 @@ async def list_requirements(
     status: RequirementStatus | None = None,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    active_only: bool = False,
+    blood_group: BloodGroup | None = None,
+    urgency: UrgencyLevel | None = None,
 ) -> BloodRequirementListResponse:
-    items, total = await requirement_service.list_requirements(db, status, limit, offset)
+    items, total = await requirement_service.list_requirements(
+        db, status, limit, offset, active_only, blood_group, urgency,
+    )
     return BloodRequirementListResponse(
         items=[BloodRequirementResponse.model_validate(item) for item in items],
         total=total,

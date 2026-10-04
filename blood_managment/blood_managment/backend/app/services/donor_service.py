@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.models.donor import Donor
 from app.models.profile import Profile
 from app.schemas.donor import DonorCreate, DonorUpdate
-from app.schemas.profile import ProfileRegister, ProfileUpdate
+from app.schemas.profile import ProfileRegister, ProfileUpdate, ProfileSave
 
 
 async def get_profile(db: AsyncSession, profile_id: uuid.UUID) -> Profile | None:
@@ -119,3 +119,26 @@ async def get_donor_with_profile(db: AsyncSession, donor_id: uuid.UUID) -> Donor
         .where(Donor.profile_id == donor_id)
     )
     return result.scalar_one_or_none()
+
+
+async def save_profile(db: AsyncSession, profile: Profile, payload: ProfileSave) -> Profile:
+    donor = await db.get(Donor, profile.id)
+    if donor is not None and payload.donor is not None and donor.blood_group != payload.donor.blood_group:
+        raise HTTPException(409, "Blood group cannot be changed after donor registration.")
+    profile.full_name = payload.full_name
+    profile.phone_number = payload.phone_number
+    if payload.donor is not None:
+        if donor is None:
+            donor = Donor(profile_id=profile.id, **payload.donor.model_dump())
+            db.add(donor)
+        else:
+            for field, value in payload.donor.model_dump().items():
+                setattr(donor, field, value)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "Profile changed in another session. Reload and try again.") from None
+    # Refresh the relationship as well as fields after creating a donor.
+    await db.refresh(profile, attribute_names=["full_name", "phone_number", "updated_at", "donor"])
+    return profile

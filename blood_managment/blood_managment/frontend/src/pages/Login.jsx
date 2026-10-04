@@ -36,7 +36,7 @@ function Login() {
       if (res.data?.role === "ADMIN") {
         navigate("/admin");
       } else {
-        navigate("/dashboard");
+        navigate(res.data?.donor ? "/dashboard" : "/profile");
       }
     } catch (err) {
       console.warn("Unable to verify authenticated user profile:", err);

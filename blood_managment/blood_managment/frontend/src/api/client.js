@@ -34,5 +34,6 @@ export function createApiClient({ baseURL, getSession, fetcher = globalThis.fetc
     get: (url, config) => request(url, { method: "GET", ...config }),
     post: (url, data, config) => request(url, { method: "POST", body: JSON.stringify(data), ...config }),
     patch: (url, data, config) => request(url, { method: "PATCH", body: JSON.stringify(data), ...config }),
+    put: (url, data, config) => request(url, { method: "PUT", body: JSON.stringify(data), ...config }),
   };
 }

@@ -1,70 +1,30 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
-import api from "../api/axios";
-import { mapRequirement } from "../lib/requirements";
+import useRequests from "../hooks/useRequests";
+import RequestState from "../components/RequestState";
+import Pagination from "../components/Pagination";
 
-const bloodGroups = [
-  "All",
-  "A+",
-  "A-",
-  "B+",
-  "B-",
-  "AB+",
-  "AB-",
-  "O+",
-  "O-",
-];
+
 
 function Requirements() {
   const navigate = useNavigate();
-  const [requirements, setRequirements] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState("All");
   const [selectedUrgency, setSelectedUrgency] = useState("All");
-  const [userName, setUserName] = useState("Donor");
-  const [userInitial, setUserInitial] = useState("D");
-  const [loading, setLoading] = useState(true);
-
-  const [loadError, setLoadError] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    async function loadData() {
-      try {
-        const { data: profile } = await api.get("/auth/me");
-        if (!active) return;
-        setUserName(profile.full_name);
-        setUserInitial(profile.full_name.charAt(0).toUpperCase());
-        const result = await api.get("/donors/me/requirements?limit=100");
-        if (active) setRequirements(result.data.map(mapRequirement));
-      } catch (error) {
-        if (active) setLoadError(error.status === 403
-          ? "Complete your donor profile to see matching requests."
-          : error.message);
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    void loadData();
-    return () => { active = false; };
-  }, []);
+  const [offset, setOffset] = useState(0);
+  const { profile, requirements, loading, error: loadError, total, retry } = useRequests({
+    preview: false, group: selectedGroup, urgency: selectedUrgency, offset,
+  });
+  const userName = profile?.full_name || "User";
+  const userInitial = userName.charAt(0).toUpperCase();
+  const needsProfile = !loading && !loadError && !profile?.donor;
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/login");
   };
 
-  const filteredRequirements = requirements.filter((requirement) => {
-    const groupMatches =
-      selectedGroup === "All" ||
-      requirement.bloodGroup === selectedGroup;
-
-    const urgencyMatches =
-      selectedUrgency === "All" ||
-      requirement.urgency === selectedUrgency;
-
-    return groupMatches && urgencyMatches;
-  });
+  const filteredRequirements = requirements;
 
   return (
     <div className="dashboard-page">
@@ -145,7 +105,7 @@ function Requirements() {
 
               <div className="user-info">
                 <strong>{userName}</strong>
-                <span>Donor</span>
+                <span>{profile?.donor ? "Donor" : "Registered user"}</span>
               </div>
 
               <span className="chevron">⌄</span>
@@ -154,7 +114,7 @@ function Requirements() {
         </header>
 
         <div className="dashboard-content animate-fade-in-up">
-          {loadError && <p className="auth-error" role="alert">{loadError}</p>}
+
           {/* Page heading */}
           <section className="requirements-heading">
             <div>
@@ -165,14 +125,13 @@ function Requirements() {
               <h1>Blood requests</h1>
 
               <p>
-                Find people nearby who need your blood group.
-                One donation can save lives.
+                Active requests for your exact blood group across all cities. No distance filter is applied.
               </p>
             </div>
 
             <div className="request-count">
-              <strong>{filteredRequirements.length}</strong>
-              <span>open requests</span>
+              <strong>{total ?? "—"}</strong>
+              <span>active requests</span>
             </div>
           </section>
 
@@ -186,14 +145,14 @@ function Requirements() {
               <label>Blood group</label>
 
               <div className="filter-pills">
-                {bloodGroups.map((group) => (
+                {["All", ...(profile?.donor ? [profile.donor.blood_group] : [])].map((group) => (
                   <button
                     key={group}
                     className={`filter-pill ${selectedGroup === group
                         ? "selected"
                         : ""
                       }`}
-                    onClick={() => setSelectedGroup(group)}
+                    onClick={() => { setSelectedGroup(group); setOffset(0); }}
                   >
                     {group}
                   </button>
@@ -206,9 +165,7 @@ function Requirements() {
 
               <select
                 value={selectedUrgency}
-                onChange={(event) =>
-                  setSelectedUrgency(event.target.value)
-                }
+                onChange={event => { setSelectedUrgency(event.target.value); setOffset(0); }}
                 className="urgency-select"
               >
                 <option value="All">All urgency levels</option>
@@ -226,7 +183,7 @@ function Requirements() {
               <h2>Available requests</h2>
 
               <span>
-                {filteredRequirements.length} results
+                {total ?? "—"} results
               </span>
             </div>
 
@@ -234,7 +191,7 @@ function Requirements() {
               <div style={{ display: "grid", placeItems: "center", padding: "80px 0" }}>
                 <div className="spinner" style={{ borderTopColor: "var(--primary)" }}></div>
               </div>
-            ) : filteredRequirements.length > 0 ? (
+            ) : loadError ? <RequestState error={loadError} retry={retry} /> : needsProfile ? <RequestState needsProfile /> : filteredRequirements.length > 0 ? (
               filteredRequirements.map((requirement) => (
                 <article
                   className="requirement-large-card"
@@ -333,6 +290,7 @@ function Requirements() {
                   className="btn btn-secondary"
                   onClick={() => {
                     setSelectedGroup("All");
+                    setOffset(0);
                     setSelectedUrgency("All");
                   }}
                 >
@@ -340,6 +298,7 @@ function Requirements() {
                 </button>
               </div>
             )}
+            {!loading && !loadError && total != null && <Pagination offset={offset} limit={20} total={total} onChange={setOffset} />}
           </section>
         </div>
       </main>

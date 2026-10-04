@@ -1981,6 +1981,16 @@ h6 {
 }
 
 /* Mobile responsive layout overrides */
+.user-directory { padding: 20px; margin-bottom: 24px; }
+.user-directory .section-heading { flex-wrap: wrap; gap: 12px; }
+.user-directory p { color: var(--text-secondary); margin: 8px 0; }
+.directory-scroll { overflow-x: auto; }
+.directory-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+.directory-table th, .directory-table td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.directory-table td { overflow-wrap: anywhere; min-width: 110px; }
+.list-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0; }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
 @media (max-width: 850px) {
   .mobile-nav-bar {
     display: grid;

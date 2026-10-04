@@ -56,3 +56,11 @@ class ProfileWithDonorResponse(ProfileResponse):
     donor: Optional[DonorResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProfileSave(BaseModel):
+    """Save personal and optional donor details in one transaction."""
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    full_name: str = Field(min_length=2, max_length=255)
+    phone_number: str | None = Field(None, max_length=20)
+    donor: DonorCreate | None = None

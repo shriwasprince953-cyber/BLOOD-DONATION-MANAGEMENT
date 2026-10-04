@@ -30,16 +30,23 @@ function Profile() {
 
   const [hasDonor, setHasDonor] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [role, setRole] = useState(null);
+  const [registerDonor, setRegisterDonor] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
     async function loadData() {
+      setFetching(true);
+      setLoadFailed(false);
       try {
         const { data } = await api.get("/auth/me");
         if (!active) return;
         setProfile({ fullName: data.full_name, email: data.email, phoneNumber: data.phone_number || "" });
         setUserInitial(data.full_name.charAt(0).toUpperCase());
         setHasDonor(Boolean(data.donor));
+        setRole(data.role);
+        setRegisterDonor(Boolean(data.donor));
         if (data.donor) setDonor({
           bloodGroup: data.donor.blood_group, city: data.donor.city || "",
           isAvailable: data.donor.is_available, lastDonationDate: data.donor.last_donation_date || "",
@@ -55,7 +62,7 @@ function Profile() {
     }
     void loadData();
     return () => { active = false; };
-  }, []);
+  }, [attempt]);
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
@@ -76,23 +83,22 @@ function Profile() {
     setMessage({ type: "", text: "" });
 
     try {
-      await api.patch("/auth/me", {
-        full_name: profile.fullName.trim(), phone_number: profile.phoneNumber || null,
+      const { data } = await api.put("/auth/me", {
+        full_name: profile.fullName.trim(), phone_number: profile.phoneNumber.trim() || null,
+        donor: registerDonor ? {
+          blood_group: donor.bloodGroup, is_available: donor.isAvailable,
+          city: donor.city.trim() || null, last_donation_date: donor.lastDonationDate || null,
+        } : null,
       });
-      const payload = {
-        is_available: donor.isAvailable, city: donor.city || null,
-        last_donation_date: donor.lastDonationDate || null,
-      };
-      if (hasDonor) {
-        await api.patch("/donors/me", payload);
-      } else {
-        await api.post("/donors/me", { ...payload, blood_group: donor.bloodGroup });
-        setHasDonor(true);
-      }
-      setUserInitial(profile.fullName.trim().charAt(0).toUpperCase());
+      setProfile({ fullName: data.full_name, email: data.email, phoneNumber: data.phone_number || "" });
+      setHasDonor(Boolean(data.donor));
+      setRegisterDonor(Boolean(data.donor));
+      if (data.donor) setDonor({ bloodGroup: data.donor.blood_group, city: data.donor.city || "",
+        isAvailable: data.donor.is_available, lastDonationDate: data.donor.last_donation_date || "" });
+      setUserInitial(data.full_name.charAt(0).toUpperCase());
       setMessage({ type: "success", text: "Profile updated successfully!" });
     } catch (error) {
-      setMessage({ type: "error", text: `Could not save all profile details. ${error.message}` });
+      setMessage({ type: "error", text: `Could not confirm the save. ${error.message}` });
     } finally {
       setLoading(false);
     }
@@ -118,12 +124,12 @@ function Profile() {
         <nav className="sidebar-nav">
           <span className="nav-label">MENU</span>
 
-          <Link to="/dashboard" className="nav-item">
+          <Link to={role === "ADMIN" ? "/admin" : "/dashboard"} className="nav-item">
             <Icon>⌂</Icon>
             Dashboard
           </Link>
 
-          <Link to="/requirements" className="nav-item">
+          <Link to={role === "ADMIN" ? "/admin/donor-view" : "/requirements"} className="nav-item">
             <Icon>♥</Icon>
             Blood Requests
           </Link>
@@ -135,7 +141,7 @@ function Profile() {
 
           <span className="nav-label nav-label-space">ACCOUNT</span>
 
-          <button type="button" className="nav-item nav-button" onClick={() => setMessage({ type: "success", text: "Settings saved." })}>
+          <button type="button" className="nav-item nav-button" onClick={() => document.getElementById("fullName")?.focus()}>
             <Icon>⚙</Icon>
             Settings
           </button>
@@ -175,7 +181,7 @@ function Profile() {
               <div className="avatar">{userInitial}</div>
               <div className="user-info">
                 <strong>{profile.fullName || "User"}</strong>
-                <span>Donor</span>
+                <span>{role === "ADMIN" ? "Administrator" : hasDonor ? "Donor" : "Registered user"}</span>
               </div>
               <span className="chevron">⌄</span>
             </div>
@@ -195,6 +201,9 @@ function Profile() {
             <div style={{ display: "grid", placeItems: "center", padding: "80px 0" }}>
               <div className="spinner" style={{ borderTopColor: "var(--primary)" }}></div>
             </div>
+          ) : loadFailed ? (
+            <div role="alert" className="auth-error"><p>{message.text}</p>
+              <button type="button" className="btn btn-secondary" onClick={() => setAttempt(n => n + 1)}>Retry profile</button></div>
           ) : (
             <div className="dashboard-grid" style={{ gridTemplateColumns: "1fr" }}>
               <form onSubmit={handleSave} className="card" style={{ padding: "32px", display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -250,6 +259,11 @@ function Profile() {
                     />
                   </div>
 
+                  {!hasDonor && <div className="input-group" style={{ gridColumn: "1 / -1" }}>
+                    <p>Your account is registered. Donor registration is optional; save your blood group to appear in matches.</p>
+                    <label><input type="checkbox" checked={registerDonor} onChange={event => setRegisterDonor(event.target.checked)} /> Register as a blood donor</label>
+                  </div>}
+                  {registerDonor && <>
                   {/* Blood Group */}
                   <div className="input-group">
                     <label className="input-label" htmlFor="bloodGroup">
@@ -306,9 +320,11 @@ function Profile() {
                       onChange={handleDonorChange}
                     />
                   </div>
+                  </>}
                 </div>
 
                 {/* Availability Status */}
+                {registerDonor &&
                 <div className="input-group" style={{ flexDirection: "row", alignItems: "center", gap: "12px", background: "#fdfdfd", padding: "16px", borderRadius: "12px", border: "1px solid var(--border)" }}>
                   <input
                     id="isAvailable"
@@ -326,7 +342,7 @@ function Profile() {
                       Uncheck this option if you are currently unable to donate.
                     </p>
                   </div>
-                </div>
+                </div>}
 
                 {message.text && (
                   <div className={`auth-error ${message.type === "success" ? "badge-success" : ""}`} style={{ color: message.type === "success" ? "var(--success)" : "var(--danger)", border: "1px solid var(--border)", background: message.type === "success" ? "#eaf8f2" : "#fff3f5" }}>
@@ -350,11 +366,11 @@ function Profile() {
 
       {/* Mobile Navigation */}
       <nav className="mobile-nav-bar">
-        <Link to="/dashboard" className="mobile-nav-item">
+        <Link to={role === "ADMIN" ? "/admin" : "/dashboard"} className="mobile-nav-item">
           <span>⌂</span>
           Dashboard
         </Link>
-        <Link to="/requirements" className="mobile-nav-item">
+        <Link to={role === "ADMIN" ? "/admin/donor-view" : "/requirements"} className="mobile-nav-item">
           <span>♥</span>
           Requests
         </Link>

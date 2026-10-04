@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
-import api from "../api/axios";
-import { mapRequirement } from "../lib/requirements";
+import useRequests from "../hooks/useRequests";
+import RequestState from "../components/RequestState";
+import Pagination from "../components/Pagination";
 
 const bloodGroups = [
   "All",
@@ -22,53 +23,21 @@ function Icon({ children }) {
 
 function AdminDonorView() {
   const navigate = useNavigate();
-  const [requirements, setRequirements] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState("All");
   const [selectedUrgency, setSelectedUrgency] = useState("All");
-  const [userName, setUserName] = useState("Admin User");
-  const [userInitial, setUserInitial] = useState("A");
-  const [loading, setLoading] = useState(true);
-
-  const [loadError, setLoadError] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    async function loadData() {
-      try {
-        const { data: profile } = await api.get("/auth/me");
-        if (!active) return;
-        setUserName(profile.full_name);
-        setUserInitial(profile.full_name.charAt(0).toUpperCase());
-        const result = await api.get("/requirements?limit=100");
-        if (active) setRequirements(result.data.items.map(mapRequirement));
-      } catch (error) {
-        if (active) setLoadError(error.status === 403
-          ? "Complete your donor profile to see matching requests."
-          : error.message);
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    void loadData();
-    return () => { active = false; };
-  }, []);
+  const [offset, setOffset] = useState(0);
+  const { profile, requirements, loading, error: loadError, total, retry } = useRequests({
+    preview: true, group: selectedGroup, urgency: selectedUrgency, offset,
+  });
+  const userName = profile?.full_name || "User";
+  const userInitial = userName.charAt(0).toUpperCase();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/login");
   };
 
-  const filteredRequirements = requirements.filter((requirement) => {
-    const groupMatches =
-      selectedGroup === "All" ||
-      requirement.bloodGroup === selectedGroup;
-
-    const urgencyMatches =
-      selectedUrgency === "All" ||
-      requirement.urgency === selectedUrgency;
-
-    return groupMatches && urgencyMatches;
-  });
+  const filteredRequirements = requirements;
 
   return (
     <div className="dashboard-page">
@@ -137,7 +106,7 @@ function AdminDonorView() {
         </header>
 
         <div className="dashboard-content animate-fade-in-up">
-          {loadError && <p className="auth-error" role="alert">{loadError}</p>}
+
           {/* Page heading */}
           <section className="requirements-heading">
             <div>
@@ -148,13 +117,13 @@ function AdminDonorView() {
               <h1>Blood requests</h1>
 
               <p>
-                Preview of what donors see when they browse the active requests in your area.
+                Preview active requests across all cities. Donors see requests for their saved blood group.
               </p>
             </div>
 
             <div className="request-count">
-              <strong>{filteredRequirements.length}</strong>
-              <span>open requests</span>
+              <strong>{total ?? "—"}</strong>
+              <span>active requests</span>
             </div>
           </section>
 
@@ -176,7 +145,7 @@ function AdminDonorView() {
                         ? "selected"
                         : ""
                     }`}
-                    onClick={() => setSelectedGroup(group)}
+                    onClick={() => { setSelectedGroup(group); setOffset(0); }}
                   >
                     {group}
                   </button>
@@ -189,9 +158,7 @@ function AdminDonorView() {
 
               <select
                 value={selectedUrgency}
-                onChange={(event) =>
-                  setSelectedUrgency(event.target.value)
-                }
+                onChange={event => { setSelectedUrgency(event.target.value); setOffset(0); }}
                 className="urgency-select"
               >
                 <option value="All">All urgency levels</option>
@@ -209,7 +176,7 @@ function AdminDonorView() {
               <h2>Available requests</h2>
 
               <span>
-                {filteredRequirements.length} results
+                {total ?? "—"} results
               </span>
             </div>
 
@@ -217,7 +184,7 @@ function AdminDonorView() {
               <div style={{ display: "grid", placeItems: "center", padding: "80px 0" }}>
                 <div className="spinner" style={{ borderTopColor: "var(--primary)" }}></div>
               </div>
-            ) : filteredRequirements.length > 0 ? (
+            ) : loadError ? <RequestState error={loadError} retry={retry} /> : filteredRequirements.length > 0 ? (
               filteredRequirements.map((requirement) => (
                 <article
                   className="requirement-large-card"
@@ -303,6 +270,7 @@ function AdminDonorView() {
                   className="btn btn-secondary"
                   onClick={() => {
                     setSelectedGroup("All");
+                    setOffset(0);
                     setSelectedUrgency("All");
                   }}
                 >
@@ -310,6 +278,7 @@ function AdminDonorView() {
                 </button>
               </div>
             )}
+            {!loading && !loadError && total != null && <Pagination offset={offset} limit={20} total={total} onChange={setOffset} />}
           </section>
         </div>
       </main>

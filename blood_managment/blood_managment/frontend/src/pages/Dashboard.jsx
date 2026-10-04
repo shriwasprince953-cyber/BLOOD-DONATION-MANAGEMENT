@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
-import api from "../api/axios";
-import { mapRequirement } from "../lib/requirements";
+import useRequests from "../hooks/useRequests";
+import RequestState from "../components/RequestState";
 
 function Icon({ children }) {
   return <span className="dashboard-icon">{children}</span>;
@@ -10,34 +9,10 @@ function Icon({ children }) {
 
 function Dashboard() {
   const navigate = useNavigate();
-  const [userName, setUserName] = useState("Donor");
-  const [userInitial, setUserInitial] = useState("D");
-  const [requirements, setRequirements] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const [loadError, setLoadError] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    async function loadData() {
-      try {
-        const { data: profile } = await api.get("/auth/me");
-        if (!active) return;
-        setUserName(profile.full_name);
-        setUserInitial(profile.full_name.charAt(0).toUpperCase());
-        const result = await api.get("/donors/me/requirements?limit=100");
-        if (active) setRequirements(result.data.map(mapRequirement));
-      } catch (error) {
-        if (active) setLoadError(error.status === 403
-          ? "Complete your donor profile to see matching requests."
-          : error.message);
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    void loadData();
-    return () => { active = false; };
-  }, []);
+  const { profile, requirements, loading, error: loadError, total, retry } = useRequests({ limit: 6 });
+  const userName = profile?.full_name || "User";
+  const userInitial = userName.charAt(0).toUpperCase();
+  const needsProfile = !loading && !loadError && !profile?.donor;
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -119,7 +94,7 @@ function Dashboard() {
 
               <div className="user-info">
                 <strong>{userName}</strong>
-                <span>Donor</span>
+                <span>{profile?.donor ? "Donor" : "Registered user"}</span>
               </div>
 
               <span className="chevron">⌄</span>
@@ -128,7 +103,7 @@ function Dashboard() {
         </header>
 
         <div className="dashboard-content animate-fade-in-up">
-          {loadError && <p className="auth-error" role="alert">{loadError}</p>}
+
           {/* Welcome */}
           <section className="welcome-section">
             <div>
@@ -158,11 +133,11 @@ function Dashboard() {
               </div>
 
               <div>
-                <span>Total Donations</span>
-                <strong>—</strong>
+                <span>Blood Group</span>
+                <strong>{loading || loadError ? "—" : profile?.donor?.blood_group || "Not registered"}</strong>
               </div>
 
-              <small>Keep making a difference</small>
+              <small>Saved donor profile</small>
             </div>
 
             <div className="stat-card">
@@ -171,11 +146,11 @@ function Dashboard() {
               </div>
 
               <div>
-                <span>Lives Impacted</span>
-                <strong>—</strong>
+                <span>Donation Availability</span>
+                <strong>{loading || loadError ? "—" : !profile?.donor ? "Not registered" : profile.donor.is_available ? "Available" : "Unavailable"}</strong>
               </div>
 
-              <small>Every donation matters</small>
+              <small>Update in My Profile</small>
             </div>
 
             <div className="stat-card">
@@ -185,7 +160,7 @@ function Dashboard() {
 
               <div>
                 <span>Available Requests</span>
-                <strong>{requirements.length}</strong>
+                <strong>{total ?? "—"}</strong>
               </div>
 
               <small>People need your help</small>
@@ -201,7 +176,7 @@ function Dashboard() {
                     NEEDS YOUR ATTENTION
                   </span>
 
-                  <h2>Nearby blood requests</h2>
+                  <h2>Matching blood requests</h2>
                 </div>
 
                 <Link to="/requirements" className="view-all">
@@ -213,8 +188,10 @@ function Dashboard() {
                 <div style={{ display: "grid", placeItems: "center", padding: "40px" }}>
                   <div className="spinner" style={{ borderTopColor: "var(--primary)" }}></div>
                 </div>
+              ) : loadError || needsProfile ? (
+                <RequestState error={loadError} retry={retry} needsProfile={needsProfile} />
               ) : (
-                requirements.length === 0 ? <p>No matching requests. Complete your profile or check back later.</p> : requirements.map((req) => (
+                requirements.length === 0 ? <p>No active requests match your blood group right now.</p> : requirements.map((req) => (
                   <article key={req.id} className={`request-card ${req.urgency === "CRITICAL" || req.urgency === "HIGH" ? "urgent" : ""}`}>
                     <div className="request-top">
                       <div className="blood-group">
@@ -260,10 +237,10 @@ function Dashboard() {
                     </div>
 
                     <div className="request-action">
-                      <span>Your blood group matches this request.</span>
+                      <span>{profile?.donor?.is_available ? "Your blood group matches this request." : "Availability is off. Enable it in My Profile before responding."}</span>
 
                       <button type="button" className="donate-button" onClick={() => navigate(`/requirements/${req.id}`)}>
-                        I Can Donate →
+                        View Request →
                       </button>
                     </div>
                   </article>

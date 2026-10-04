@@ -38,7 +38,7 @@ function Register() {
 
       if (data.session) {
         await ensureProfile(api, data.user);
-        navigate("/dashboard");
+        navigate("/profile");
       } else {
         navigate("/login", { state: { message: "Check your email to confirm your account, then sign in." } });
       }

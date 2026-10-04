@@ -1,5 +1,13 @@
 # React + Vite
 
+## User and donor data checks
+
+Run `npm test`, `npm run lint`, and `npm run build` for API-client checks and the production build.
+
+Run `npx playwright install chromium` once, then `npm run test:browser` for the local browser regression suite. To use an existing Chromium executable, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its full path. The suite starts a local Vite server on port 5178, mocks Auth/API calls, blocks external network requests, and checks user pagination, pending signup visibility, non-donor and donor saves, failure/retry states, and mobile overflow. It does not verify deployed Supabase or backend connectivity.
+
+Deploy the frontend and backend together: the admin directory uses `/admin/users`, profile saves use `PUT /auth/me`, and donor request pages use `/donors/me/requirements/page`. The backend README documents the required read access to the existing Supabase Auth table. Use **Refresh data** in the admin dashboard to reload users, counts and requests after changes in another session.
+
 ## RaktSetu setup and checks
 
 Copy `.env.example` to `.env`, configure the Supabase project and API URL, then run `npm ci` and `npm run dev`.

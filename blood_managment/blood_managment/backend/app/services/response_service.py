@@ -16,6 +16,8 @@ async def create_donation_response(
     donor: Donor,
     requirement: BloodRequirement,
 ) -> DonationResponse:
+    if not donor.is_available:
+        raise HTTPException(409, "Enable donation availability in My Profile before responding.")
     if requirement.status not in {RequirementStatus.OPEN, RequirementStatus.IN_PROGRESS}:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

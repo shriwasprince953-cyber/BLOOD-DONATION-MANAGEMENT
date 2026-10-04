@@ -38,6 +38,22 @@ test("empty successful responses are supported", async () => {
   assert.equal((await api.patch("/auth/me", {})).data, null);
 });
 
+test("combined profile save uses PUT and returns canonical saved data", async () => {
+  const payload = { full_name: "Saved User", donor: { blood_group: "O+", is_available: true } };
+  const api = client(async (url, options) => {
+    assert.equal(url, "http://localhost:8000/api/v1/auth/me");
+    assert.equal(options.method, "PUT");
+    assert.deepEqual(JSON.parse(options.body), payload);
+    return Response.json({ ...payload, role: "DONOR" });
+  });
+  assert.equal((await api.put("/auth/me", payload)).data.donor.blood_group, "O+");
+});
+
+test("directory errors preserve failure status instead of yielding an empty list", async () => {
+  const api = client(async () => Response.json({ detail: "Account data could not be loaded." }, { status: 503 }));
+  await assert.rejects(api.get("/admin/users"), { status: 503, message: "Account data could not be loaded." });
+});
+
 test("session errors stop requests", async () => {
   const api = client(() => assert.fail("request must not run"), async () => ({ data: { session: null }, error: new Error("Session expired") }));
   await assert.rejects(api.get("/auth/me"), /Session expired/);

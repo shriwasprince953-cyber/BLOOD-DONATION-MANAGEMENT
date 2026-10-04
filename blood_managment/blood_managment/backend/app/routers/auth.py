@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.dependencies import CurrentProfile, CurrentUser, DbSession
-from app.schemas.profile import ProfileRegister, ProfileResponse, ProfileUpdate, ProfileWithDonorResponse
+from app.schemas.profile import ProfileRegister, ProfileResponse, ProfileUpdate, ProfileWithDonorResponse, ProfileSave
 from app.services import donor_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -35,3 +35,9 @@ async def update_me(
 ) -> ProfileResponse:
     updated = await donor_service.update_profile(db, profile, payload)
     return ProfileResponse.model_validate(updated)
+
+
+@router.put("/me", response_model=ProfileWithDonorResponse)
+async def save_me(payload: ProfileSave, db: DbSession, profile: CurrentProfile) -> ProfileWithDonorResponse:
+    saved = await donor_service.save_profile(db, profile, payload)
+    return ProfileWithDonorResponse.model_validate(saved)

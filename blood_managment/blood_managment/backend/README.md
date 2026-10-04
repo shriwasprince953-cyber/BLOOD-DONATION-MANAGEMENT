@@ -34,6 +34,18 @@ Authorization: Bearer <supabase_access_token>
 
 Application roles live in the `profiles.role` column. New registered users are donors by default. Promote trusted admins directly in the database.
 
+The `DONOR` role permits the regular user area; it does not mean a donor record exists. After signup/first login, My Profile lets users save personal details and optionally register as donors. `PUT /api/v1/auth/me` saves personal and donor details in one transaction, preserves existing donor records, and rejects blood-group changes after registration. The older PATCH and donor endpoints remain supported.
+
+### Admin account directory and counts
+
+`GET /api/v1/admin/users?limit=20&offset=0` is admin-only. It joins Supabase `auth.users`, application `profiles`, and `donors`, including unconfirmed signups, accounts awaiting profile setup, and legacy profiles whose login account is missing. Only selected directory fields are returned; Auth metadata never controls roles. The saved application name takes precedence over signup metadata.
+
+The backend `DATABASE_URL` must point to the same Supabase database as Auth. Its server-side database role needs SELECT access to `auth.users` (id, email, raw_user_meta_data, email_confirmed_at, created_at), in addition to application tables. The directory does not create or modify Auth tables, and requires no application schema migration. A standalone Postgres database without Supabase Auth cannot provide this directory. Missing Auth schema/permissions return 503 instead of an empty user list or zero users; check backend database configuration if that happens. Never expose the database connection or service key in frontend variables.
+
+`/admin/stats` returns `totalUsers` (unique Auth/profile accounts), `totalDonors` (saved donor records), and `availableDonors` (availability switched on), plus existing request counts. Availability is a user preference, not a medical eligibility assessment. The UI has separate paginated lists and refresh/retry controls.
+
+Matching uses the exact blood group and available donors across all cities; there is no location/distance filter. Donors can browse active requests while unavailable, but must enable availability before responding. `/donors/me/requirements/page` provides paginated active matches and an exact filtered total; the previous list endpoint remains available. Admin request previews use `active_only=true`. Closed requests cannot send new donor notifications.
+
 JWT verification uses Supabase's `/auth/v1/.well-known/jwks.json` endpoint for asymmetric keys and the Auth `/user` endpoint for legacy HS256 tokens. See [Supabase JWT documentation](https://supabase.com/docs/guides/auth/jwts).
 
 Set `CORS_ORIGINS` to the actual frontend origins (including localhost during development). The frontend `VITE_API_URL` must include `/api/v1`; deployed frontends must use the deployed backend URL rather than localhost. Frontend and backend must reference the same Supabase project.

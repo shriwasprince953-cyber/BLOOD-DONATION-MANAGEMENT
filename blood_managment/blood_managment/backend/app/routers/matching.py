@@ -1,6 +1,7 @@
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from app.models.blood_requirement import RequirementStatus
 
 from app.dependencies import AdminProfile, DbSession
 from app.schemas.donor import MatchedDonorResponse
@@ -57,6 +58,8 @@ async def notify_matching_donors(
     exact_match_only: bool = True,
 ) -> NotifyMatchedDonorsResponse:
     requirement = await requirement_service.get_requirement_or_404(db, requirement_id)
+    if requirement.status not in {RequirementStatus.OPEN, RequirementStatus.IN_PROGRESS}:
+        raise HTTPException(409, "This request is closed and cannot notify donors.")
     donors = await matching_service.find_matching_donors(db, requirement, exact_match_only)
     notifications, skipped = await notification_service.queue_notifications_for_donors(
         db,

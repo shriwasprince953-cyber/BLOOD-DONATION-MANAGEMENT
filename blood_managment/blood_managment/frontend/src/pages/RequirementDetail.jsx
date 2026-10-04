@@ -18,6 +18,9 @@ function RequirementDetail() {
   const [message, setMessage] = useState({ type: "", text: "" });
   const [userInitial, setUserInitial] = useState("U");
   const [userName, setUserName] = useState("Donor");
+  const [donor, setDonor] = useState(null);
+  const [loadError, setLoadError] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -25,6 +28,8 @@ function RequirementDetail() {
       setLoading(true);
       setRequirement(null);
       setResponseStatus(null);
+      setDonor(null);
+      setLoadError("");
       setMessage({ type: "", text: "" });
       try {
         const [{ data: profile }, { data: request }] = await Promise.all([
@@ -34,17 +39,19 @@ function RequirementDetail() {
         setUserInitial(profile.full_name.charAt(0).toUpperCase());
         setUserName(profile.full_name);
         setRequirement(mapRequirement(request));
+        setDonor(profile.donor);
+        if (!profile.donor) return;
         const { data } = await api.get(`/responses/me?requirement_id=${encodeURIComponent(id)}`);
         if (active) setResponseStatus(data.items[0]?.status || null);
       } catch (error) {
-        if (active) setMessage({ type: "error", text: error.message });
+        if (active) setLoadError(error.message);
       } finally {
         if (active) setLoading(false);
       }
     }
     void loadData();
     return () => { active = false; };
-  }, [id]);
+  }, [id, attempt]);
 
   const handleDonate = async () => {
     setSubmitting(true);
@@ -74,12 +81,13 @@ function RequirementDetail() {
     );
   }
 
-  if (!requirement) {
+  if (loadError || !requirement) {
     return (
       <div className="dashboard-page" style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
         <div className="card" style={{ padding: "40px", textAlign: "center" }}>
-          <h2>Request Not Found</h2>
-          <p style={{ marginTop: "10px", color: "var(--text-secondary)" }}>{message.text || "The blood request details could not be loaded."}</p>
+          <h2>Unable to load request</h2>
+          <p role="alert" style={{ marginTop: "10px", color: "var(--text-secondary)" }}>{loadError || "The blood request details could not be loaded."}</p>
+          <button type="button" className="btn btn-secondary" onClick={() => setAttempt(n => n + 1)}>Retry</button>
           <Link to="/requirements" className="btn btn-primary" style={{ marginTop: "20px" }}>
             Back to Requests
           </Link>
@@ -251,6 +259,12 @@ function RequirementDetail() {
                       You have responded to this request. We will contact you shortly.
                     </p>
                   </div>
+                ) : !donor ? (
+                  <Link to="/profile" className="btn btn-primary">Complete donor profile to respond</Link>
+                ) : !donor.is_available ? (
+                  <Link to="/profile" className="btn btn-secondary">Enable availability in My Profile</Link>
+                ) : donor.blood_group !== requirement.bloodGroup ? (
+                  <p>This request does not match your saved blood group.</p>
                 ) : (
                   <button
                     type="button"
